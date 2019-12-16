@@ -1,0 +1,1931 @@
+第9章 MyBatis的基本用法
+=========================
+
+**本章要点**
+
+* SqlSessionFactory对象
+* SqlSession对象
+* MyBatis根配置文件详解
+* MyBatis日志信息配置详解
+* Mapper 映射文件详解
+
+9.1 MyBatis体系结构
+-----------------------
+
+``MyBatis`` 的持久化解决方案将用户从原始的 ``JDBC`` 访问中解放出来，用户只需要定义需要操作的 ``SQL`` 语句，
+无须关注底层的 ``JDBC`` 操作，就可以以面向对象的方式进行持久层操作。底层数据库连接的获取、数据访问的实现、
+事务控制和数据库连接的关闭等都无须用户关心，从而将应用层从底层的 ``JDBC/JTA API`` 抽取出来。
+通过配置文件管理 ``JDBC`` 连接，让 ``MyBatis`` 完成持久化访问的实现。
+
+``MyBatis`` 中的常用对象有 ``SqlSessionFactory`` 和 ``SqlSession``。
+
+9.1.1 SqlSessionFactory
++++++++++++++++++++++++++++++
+
+``SqlSessionFactory`` 是 ``MyBatis`` 的关键对象，它是单个数据库映射关系经过编译后的内存镜像。
+``SqlSessionFactory`` 对象的实例可以通过 ``SqlSessionFactoryBuilder`` 对象来获得，
+而 ``SqlSessionFactoryBuilder`` 则可以从 ``XML`` 配置文件或一个预先定制的 ``Configuration`` 的实例构建出
+``SqlSessionFactory`` 的实例。每一个 ``MyBatis`` 的应用程序都以一个 ``SqlSessionFactory`` 对象的实例为核心。
+其也是线程安全的，``SqlSessionFactory`` 一旦被创建，应该在应用执行期间都存在。
+在应用运行期间不需要重复创建多次，建议使用单例模式。``SqlSessionFactory`` 是创建 ``SqlSession`` 的工厂。
+
+``SqlSessionFactory`` 的常用方法如下：
+
+.. csv-table:: 
+   :header: 方法, 描述
+   :widths: auto
+   :align: left
+
+    sqlSession openSession(),  创建SqlSession对象。
+
+9.1.2 SqlSession
++++++++++++++++++++++++++++++
+
+``SqlSession`` 是 ``MyBatis`` 的关键对象，它是执行持久化操作的对象，类似于 ``JDBC`` 中的 ``Connection``。
+它是应用程序与持久存储层之间执行交互操作的一个单线程对象，也是 ``MyBatis`` 执行持久化操作的关键对象。
+``SqlSession`` 对象完全包含以数据库为背景的所有执行 ``SQL`` 操作的方法，它的底层封装了 ``JDBC`` 连接，
+可以用 ``SqlSession`` 实例来直接执行已映射的SQL语句。每个线程都应该有它自己的 ``SqlSession`` 实例。
+``SqlSession`` 的实例不能被共享，也是线程不安全的，绝对不能将 ``SqlSession`` 实例的引用放在一个类的静态字段甚至是实例字段中。
+也绝不能将 ``SqlSession`` 实例的引用放在任何类型的管理范围中，比如 ``Serlvet`` 当中的 ``HttpSession`` 
+对象中。使用完 ``SqlSession`` 之后关闭 ``Session`` 很重要，应该确保使用 ``finally`` 块来关闭它。
+
+``SqlSession`` 的常用方法如下：
+
+.. csv-table:: 
+   :header: 方法, 描述
+   :widths: auto
+   :align: left
+
+   ``int insert（String statement）``, "插入方法，参数statement是在配置文件中定义的 ``＜insert.../＞`` 元素的id，返回执行SQL语句所影响的行数。"
+   ``int insert（String statement，Object parameter）``, "插入方法，参数statement是在配置文件中定义的 ``＜insert.../＞`` 元素的id，parameter是插入所需的参数，通常是对象或者Map，返回执行SQL语句所影响的行数。"
+   ``int update（String statement）``, "更新方法，参数 statement 是在配置文件中定义的 ``＜update.../＞`` 元素的id，返回执行SQL语句所影响的行数。"
+   ``int update（String statement，Object parameter）``, "更新方法，参数statement 是在配置文件中定义的 ``＜update.../＞`` 元素的id，parameter是插入所需的参数，通常是对象或者Map，返回执行SQL语句所影响的行数。"
+   ``int delete（String statement）``,  删除方法，参数statement是在配置文件中定义的 ``＜delete.../＞`` 元素的id。返回执行SQL语句所影响的行数。
+   ``int delete（String statement，Object parameter）``,  "删除方法，参数statement 是在配置文件中定义的 ``＜delete.../＞`` 元素的id，parameter是插入所需的参数，通常是对象或者Map，返回执行SQL语句所影响的行数。"
+   ``＜T＞ T selectOne（String statement）``,  "查询方法，参数statement是在配置文件中定义的 ``＜select.../＞`` 元素的 id。返回执行 SQL语句查询结果的泛型对象，通常查询结果只有一条数据时才使用。"
+   ``＜T＞T selectOne（String statement，Object parameter）``,  "查询方法，参数statement是在配置文件中定义的 ``＜select.../＞`` 元素的 id，parameter 是查询所需的参数，通常是对象或者Map，返回执行SQL语句查询结果的泛型对象，通常查询结果只有一条数据时才使用。"
+   ``＜E＞ List＜E＞ selectList（String statement）``,  "查询方法，参数是在配置文件中定义的 ``＜select.../＞`` 元素的id，返回执行SQL语句查询结果的泛型对象的集合。"
+   ``＜E＞List＜E＞selectList（String statement，Object parameter）``, "查询方法，参数statement是在配置文件中定义的 ``＜select.../＞`` 元素的 id，parameter 是查询所需的参数，通常是对象或者Map，返回执行SQL语句查询结果的泛型对象的集合。"
+   ``＜E＞List＜E＞selectList（String statement，Object parameter，RowBounds rowBounds）``,  "查询方法，参数statement是在配置文件中定义的 ``＜select.../＞`` 元素的id，parameter是查询所需的参数，通常是对象或者Map。RowBounds对象用于分页，它的两个属性：offset指查询的当前页数；limit指当前页显示多少条数据。返回执行SQL语句查询结果的泛型对象的集合。"
+   ``＜K，V＞ Map＜K，V＞ selectMap（String statement，String mapKey）``,  "查询方法，参数statement是在配置文件中定义的 ``＜select.../＞`` 元素的id，mapKey是返回数据的其中一个列名，执行 SQL 语句查询的结果将会被封装成一个 Map 集合返回，key 就是参数mapKey传入的列名，value是封装的对象。"
+   ``＜K，V＞Map＜K，V＞selectMap（String statement，Object parameter，String mapKey）``, "查询方法，参数statement是在配置文件中定义的 ``＜select.../＞`` 元素的id，parameter是查询所需的参数，通常是对象或者Map，mapKey是返回数据的其中一个列名，执行SQL语句查询的结果将会被封装成一个Map集合返回，key就是参数mapKey传入的列名，value是封装的对象。"
+   ``＜K，V＞Map＜K，V＞selectMap（String statement，Object parameter，String mapKey，RowBounds rowBounds）``, "查询方法，参数statement是在配置文件中定义的 ``＜select.../＞`` 元素的id，parameter是查询所需的参数，通常是对象或者Map，mapKey是返回数据的其中一个列名，RowBounds 对象用于分页。执行 SQL语句查询的结果将会被封装成一个 Map集合返回，key就是参数mapKey传入的列名，value是封装的对象。"
+   ``void select（String statement，ResultHandler handler）``,  "查询方法，参数statement 是在配置文件中定义的 ``＜select.../＞`` 元素的id，ResultHandler对象用来处理查询返回的复杂结果集，通常用于多表查询。"
+   ``void select（String statement，Object parameter，ResultHandler handler）``, "查询方法，参数statement是在配置文件中定义的 ``＜select.../＞`` 元素的id，parameter是查询所需的参数，通常是对象或者Map，ResultHandler对象用来处理查询返回的复杂结果集，通常用于多表查询。"
+   ``void select（String statement，Object parameter，RowBounds rowBounds，ResultHandler handler）``, "查询方法，参数 statement 是在配置文件中定义的 ``＜select.../＞`` 元素的 id，parameter 是查询所需的参数，通常是对象或者 Map，RowBounds 对象用于分页，ResultHandler对象用来处理查询返回的复杂结果集，通常用于多表查询。"
+   ``void commit（）``, 提交事务。
+   ``void rollback（）``, 回滚事务。
+   ``void close（）``, 关闭SqlSession对象。
+   ``Connection getConnection（）``,  获得JDBC的数据库连接对象。
+   ``＜T＞ T getMapper（Class＜T＞ type）``,  "返回mapper接口的代理对象，该对象关联了SqlSession对象，开发者可以通过该对象直接调用方法操作数据库，参数type是Mapper的接口类型。MyBatis官方手册建议通过mapper对象访问MyBatis。"
+
+.. note::
+
+    在实际应用中很少会直接使用DriverManager来获取数据库连接，通常都会使用DataSource来获取数据库连接，
+    SqlSessionFactory底层封装了DataSource。
+
+9.2 深入MyBatis的配置文件
+---------------------------
+
+通过上面的介绍，我们可以知道MyBatis的持久化操作离不开SqlSessionFactory对象，
+这个对象是整个数据库映射关系经过编译后的内存镜像，该对象的openSession（）方法可以打开SqlSession对象。
+该对象由SqlSessionFactoryBuilder加载MyBatis的配置文件产生。
+
+再来回顾一下之前的代码：
+
+.. code:: java
+
+    // 读取mybatis-config.xml文件
+    InputStream is = Resources.getResourceAsStream("mybatis-config.xml");)
+    // 读取配置文件,初始化mybatis,创建SqlSessionFactory类的实例
+    SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(is);
+    sqlSession = sqlSessionFactory.openSession();
+
+上述代码的功能是根据配置文件mybatis-config.xml，创建SqlSessionFactory对象，然后产生SqlSession，
+执行SQL语句。而MyBatis的初始化就发生在第三句：
+
+.. code:: java
+
+    SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder().build(is);
+
+现在就让我们看看第三句到底发生了什么。
+
+MyBatis 初始化基本过程：
+
+SqlSessionFactoryBuilder 根据传入的输入流生成Configuration 对象，然后根据Configuration
+对象创建默认的SqlSessionFactory实例。初始化的基本过程如图9.1所示。
+
+图9.1 MyBatis初始化基本流程
+
+.. figure:: /_static/images/0901.png
+   :alt: 
+
+由图9.1可知，MyBatis初始化要经过以下几步：
+
+1. 调用SqlSessionFactoryBuilder对象的build（inputStream）方法。
+2. SqlSessionFactoryBuilder会根据输入流inputStream等信息创建XMLConfigBuilder对象。
+3. SqlSessionFactoryBuilder调用 XMLConfigBuilder对象的parse（）方法。
+4. XMLConfigBuilder对象解析XML配置文件返回Configuration对象。
+5. SqlSessionFactoryBuilder根据Configuration对象创建一个DefaultSessionFactory 对象。
+6. SqlSessionFactoryBuilder返回DefaultSessionFactory对象给客户端，供客户端使用。
+
+由此可见，SqlSessionFactory是根据MyBatis的配置文件mybatisconfig.xml创建的。
+下面我们就来重点介绍MyBatis的配置文件中常用属性的意义。
+
+9.2.1 MyBatis的配置文件结构
++++++++++++++++++++++++++++++
+
+MyBatis的配置文件包含了影响MyBatis行为的信息。文档的结构如下：
+
+* 顶层configuration 配置
+* properties 属性
+* settings 设置
+* typeAliases 类型命名
+* typeHandlers 类型处理器
+* objectFactory 对象工厂
+* plugins 插件
+* environments 环境
+* environment 环境变量
+* transactionManager 事务管理器
+* dataSource 数据源
+* databaseIdProvider 数据库厂商标识
+* mappers 映射器
+
+9.2.2 properties属性
++++++++++++++++++++++++++++++
+
+这些属性都是可外部配置且可动态替换的，既可以在典型的 Java属性文件中配置，亦可通过properties
+元素的子元素来传递。可以在CLASSPATH中增加一个db.properties的Java属性文件。
+
+.. code:: 
+
+    driver=com.mysql.jdbc.Driver
+    url=jdbc:mysql://127.0.0.1:3306/mybatis
+    username=root
+    password=root
+
+在配置文件中配置 ``＜properties.../＞`` 属性：
+
+.. code:: xml 
+
+    <!-- 引入properties资源文件,以便后面使用 -->
+    <properties resource="db.properties"/>
+
+其中的属性就可以在整个配置文件中使用来替换需要动态配置的属性值。
+
+.. code:: xml 
+
+    <!--  dataSource指数据源配置，POOLED是JDBC连接对象的数据源连接池的实现。 -->
+    <dataSource type="POOLED">
+        <property name="driver" value="${driver}"/>
+        <property name="url" value="${url}"/>
+        <property name="username" value="${username}"/>
+        <property name="password" value="${password}"/>
+    </dataSource>
+
+driver、url、username和password 属性将会由db.properties文件中对应的值来替换。这样就为配置提供了诸多灵活选择。
+
+9.2.3 settings设置
++++++++++++++++++++++++++++++
+
+这是 MyBatis 中极为重要的调整设置，它们会改变 MyBatis 的运行时行为。表9.1描述了设置中各项的参数、默认值等。
+
+表9.1 settings设置的详细说明
+
+.. csv-table:: 
+   :header: 设置参数, 描述, 有效值, 默认值
+   :widths: auto
+   :align: left
+
+   cacheEnabled, 该配置影响所有映射器中配置的缓存的全局开关, "ture|false", true
+   lazyLoadingEnabled, "延迟加载的全局开关,当开启时,所有关联对象都会延迟加载,特定关联关系中可通过设置fetchType属性来覆盖该项的开关状态", true|false, false
+   aggressiveLazyLoading, "当启用时,对任意延迟属性的调用会使带有延迟加载属性的对象完整加载;反之,每种属性将会按需加载", true|false, true
+   multipleResultSetsEnabled, 是否允许单一语句返回多结果集(需要兼容驱动), true|false, true
+   useGenneratedKeys, "允许JDBC支持自动生成主键,需要驱动兼容.如果设置为true这这个设置强制使用自动生成主键,尽管一些驱动不能兼容但仍正常工作", true|false, false
+   autoMappingBehavior, "指定MyBatis应如何自动映射列到字段或属性,NONE表示取消自动映射;PARTIAL只会自动映射没有定义嵌套结果集映射的结果集.FULL会自动映射任意复杂结果集(无论是否嵌套)", NONE|PARTIAL|FULL, PARTIAL
+   autoMappingUnknownColumnBehavior, "是否自动映射未知的字段或属性, NONE:什么都不做;WARNING:警告;FAILING:抛出异常;", NONE|WARNING|FAILING, NONE
+   defaultExceptionType, "配置默认的执行器.SIMPLE就是普通执行器;REUSE执行器会重用预处理语句(prepared statements);BATCH执行器将重用语句并执行批量更新", SIMPLE|REUSE|CATCH, SIMPLE
+   defaultStatementTimeout, "设置超时时间,他决定驱动等待数据库响应的秒数", integer, null
+   defaultFetchSize, 默认返回的结果集大小,integer,null
+   safeRowBoundsEnabled,允许在嵌套语句中使用分页(RowBounds),true|false,false
+   mapUnderscoreToCame, 是否开启自动驼峰命名规则(camelcase)映射, true|false, false
+   localCacheScope, "MyBatis利用本地缓存机制(LocalCache)防止循环引用(circular references)和加速重复嵌套查询.默认值为SESSION,这种情况下会缓存一个会话中执行的所有查询.若设置值为STATEMENT,则本地 会话仅用在语句执行上,对相同SqlSession的不同调用将不会共享数据", SESSION|STATEMENT,SESSION
+   jdbcTypeForNull, "当没有为参数提供特定的JDBC类型时,为空值指定JDBC类型.某些驱动需要指定列的JDBC类型,多数情况直接用一般类型即可,比如NULL,VARCHAR或OTHER", NULL|VARCHAR|OTHER,OTHER
+   lazyLoadTriggerMethods, 指定哪个对象的方法触发一次延迟加载, 方法名的list集合, "equals.clone.hachCode,toString"
+   defaultScriptingLanguage, 指定动态SQL生成的默认语言, 一个类型别名或完全限定类名, org.apache.ibatis.scripting.xmltags .XMLDynamicLanguageDriver
+   callSettersOnNulls, "指定当结果集中值为null时是否调用映射对象的setter(map对象为put)方法,这对于有Map.keySet()依赖或null值初始化时是有用的,注意基本类型(int,boolean等)是不能设置成null的", true|false, false
+   logPrefix, 指定MyBatis增加到日志名称的前缀, String, null
+   logImpl, "指定MyBatis所用日志的具体实现,未指定时将自动查找", SLF4J|LOG4J|LOG4J2|K_LOGGING | COMMON_LOGGING | STDOUT_LOGGING|NO_LOGGING, null
+
+一个配置完整的settings元素的示例如下：
+
+.. code:: xml 
+
+    <!-- 全局settings的配置样例 -->
+    <settings>
+        <setting name="cacheEnabled" value="true"/>
+        <setting name="lazyLoadingEnabled" value="true"/>
+        <setting name="multipleResultSetsEnabled" value="true"/>
+        <setting name="useColumnLabel" value="true"/>
+        <setting name="useGeneratedKeys" value="false"/>
+        <setting name="autoMappingBehavior" value="PARTIAL"/>
+        <setting name="autoMappingUnknownColumnBehavior" value="WARNING"/>
+        <setting name="defaultExecutorType" value="SIMPLE"/>
+        <setting name="defaultStatementTimeout" value="25"/>
+        <setting name="defaultFetchSize" value="100"/>
+        <setting name="safeRowBoundsEnabled" value="false"/>
+        <setting name="mapUnderscoreToCamelCase" value="false"/>
+        <setting name="localCacheScope" value="SESSION"/>
+        <setting name="jdbcTypeForNull" value="OTHER"/>
+        <setting name="lazyLoadTriggerMethods" value="equals,clone,hashCode,toString"/>
+    </settings> 
+
+9.2.4 typeAliases类型命名
++++++++++++++++++++++++++++++
+
+类型别名是为Java类型设置的一个短的名字。它只和 XML 配置有关，存在的意义仅在于用来减少类完全限定名的冗余。
+
+.. code:: xml 
+
+    <typeAliases>
+        <typeAlias alias="user" type="org.fkit.domain.User"/>
+    </typeAliases>
+
+当这样配置时，user可以用在任何使用org.fkit.domain.User的地方。
+也可以指定一个包名，MyBatis 会在包名下面搜索需要的JavaBean。
+
+.. code:: xml 
+
+    <typeAliases>
+        <package name="org.fkit.domain"/>
+    </typeAliases>
+
+每一个在包org.fkit.domain 中的JavaBean，在没有注解的情况下，会使用Bean的首字母小写的非限定类名来作为它的别名。
+比如org.fkit.domain.User的别名为user；若有注解，则别名为其注解值。
+
+.. code:: java
+
+    @Alias("user")
+    public class User {
+    }
+
+MyBatis已经为许多常见的Java类型内建了相应的类型别名（见表9.2）。它们都是大小写不敏感的，
+需要注意的是由基本类型名称重复导致的特殊处理。
+
+表9.2 MyBatis默认别名
+
+.. csv-table:: 
+   :header: 别名, 映射的类型
+   :widths: auto
+   :align: left
+
+   _byte, byte
+   _short, short
+   _int, int
+   _long, long
+   _float, float
+   _double, double
+   byte, Byte
+   short, Short
+   int, Integer
+   long, Long
+   float, Float
+   double, Double
+   string, String
+   date, Date
+   bigdecimal, BigDecimal
+   object, Object
+   map, Map
+   hashmap, HashMap
+   list, List
+   arraylist, ArrayList
+   collection, Collection
+   iterator, Iterator
+
+9.2.5 typeHandlers类型处理器
++++++++++++++++++++++++++++++
+
+无论是MyBatis在预处理语句（PreparedStatement）中设置一个参数时，还是从结果集中取出一个值时，
+都会用类型处理器将获取的值以合适的方式转换成Java 类型。表9.3描述了一些默认的类型处理器。
+
+表9.3 MyBatis默认的类型处理器
+
+.. csv-table:: 
+   :header: 类型处理器, Java 类型, JDBC 类型
+   :widths: auto
+   :align: left
+  
+   BooleanTypeHandler, "java.lang.Boolean, boolean", 数据库兼容的 BOOLEAN
+   ByteTypeHandler, "java.lang.Byte, byte", 数据库兼容的 NUMERIC 或 BYTE
+   ShortTypeHandler, "java.lang.Short, short", 数据库兼容的 NUMERIC 或 SHORT INTEGER
+   IntegerTypeHandler, "java.lang.Integer, int", 数据库兼容的 NUMERIC 或 INTEGER
+   LongTypeHandler, "java.lang.Long, long", 数据库兼容的 NUMERIC 或 LONG INTEGER
+   FloatTypeHandler, "java.lang.Float, float", 数据库兼容的 NUMERIC 或 FLOAT
+   DoubleTypeHandler, "java.lang.Double, double", 数据库兼容的 NUMERIC 或 DOUBLE
+   BigDecimalTypeHandler, java.math.BigDecimal, 数据库兼容的 NUMERIC 或 DECIMAL
+   StringTypeHandler, java.lang.String, "CHAR, VARCHAR"
+   ClobReaderTypeHandler, java.io.Reader, `-`
+   ClobTypeHandler, java.lang.String, "CLOB, LONGVARCHAR"
+   NStringTypeHandler, java.lang.String, "NVARCHAR, NCHAR"
+   NClobTypeHandler, java.lang.String, NCLOB
+   BlobInputStreamTypeHandler, java.io.InputStream, `-`
+   ByteArrayTypeHandler, byte[], 数据库兼容的字节流类型
+   BlobTypeHandler, byte[], "BLOB, LONGVARBINARY"
+   DateTypeHandler, java.util.Date, TIMESTAMP
+   DateOnlyTypeHandler, java.util.Date, DATE
+   TimeOnlyTypeHandler, java.util.Date, TIME
+   SqlTimestampTypeHandler, java.sql.Timestamp, TIMESTAMP
+   SqlDateTypeHandler, java.sql.Date, DATE
+   SqlTimeTypeHandler, java.sql.Time, TIME
+   ObjectTypeHandler, Any, OTHER 或未指定类型
+   EnumTypeHandler, Enumeration Type, "VARCHAR-任何兼容的字符串类型，存储枚举的名称（而不是索引）"
+   EnumOrdinalTypeHandler, Enumeration Type, "任何兼容的 NUMERIC 或 DOUBLE 类型，存储枚举的索引（而不是名称）"
+
+9.2.6 objectFactory对象工厂
++++++++++++++++++++++++++++++
+
+MyBatis 每次创建结果对象的新实例时，它都会使用一个对象工厂（ObjectFactory）实例来完成。
+默认的对象工厂需要做的仅仅是实例化目标类，要么通过默认构造方法，
+要么在参数映射存在的时候通过参数构造方法来实例化。如果想覆盖对象工厂的默认行为，
+则可以通过创建自己的对象工厂来实现。
+
+.. code:: java
+
+    // ExampleObjectFactory.java
+    public class ExampleObjectFactory extends DefaultObjectFactory {
+        public Object create(Class type) {
+            return super.create(type);
+        }
+        public Object create(Class type, List<Class> constructorArgTypes, List<Object> constructorArgs) {
+            return super.create(type, constructorArgTypes, constructorArgs);
+        }
+        public void setProperties(Properties properties) {
+            super.setProperties(properties);
+        }
+        public <T> boolean isCollection(Class<T> type) {
+            return Collection.class.isAssignableFrom(type);
+        }
+    }
+
+在MyBatis配置文件中配置自定义对象工厂。
+
+.. code:: xml
+
+    <!-- mybatis-config.xml -->
+    <objectFactory type="org.mybatis.example.ExampleObjectFactory">
+        <property name="someProperty" value="100"/>
+    </objectFactory>
+
+ObjectFactory接口很简单，它包含两个创建方法：一个是处理默认构造方法的；另外一个是处理带参数的构造方法的。
+最后，setProperties方法可以被用来配置ObjectFactory，在初始化ObjectFactory实例后，
+objectFactory元素体中定义的属性会被传递给setProperties方法。
+
+9.2.7 environments配置环境
++++++++++++++++++++++++++++++
+
+MyBatis的环境配置实际就是数据源的配置。MyBatis可以配置多种环境，这种机制使得MyBatis可以将 
+SQL 映射应用于多种数据库中。例如，开发、测试和生产环境需要有不同的配置；
+多个生产数据库想使用相同的SQL映射等等。
+
+.. note::
+
+    尽管可以配置多个环境，但是每个 SqlSessionFactory 实例只能选择一个环境，即每个数据库对应一个 
+    SqlSessionFactory 实例。所以，如果你想连接两个数据库，就需要创建两个 SqlSessionFactory 实例，
+    每个数据库对应一个。而如果是三个数据库，就需要三个实例，依此类推。
+
+环境示例配置如下：
+
+.. code:: xml
+
+    <!-- 环境配置，即连接的数据库。 -->
+    <environments default="development">
+        <environment id="development">
+            <!-- 指定事务管理类型，type="JDBC"指直接简单使用了JDBC的提交和回滚设置 -->
+            <transactionManager type="JDBC">
+                <property
+                    name="..."
+                    value="..."/>
+            <transactionManager>
+            <!-- dataSource指数据源配置，POOLED是JDBC连接对象的数据源连接池的实现。 -->
+            <dataSource type="POOLED">
+                <!-- 使用配置文件db.properties中设置的driver属性值给该driver属性赋值 -->
+                <property
+                    name="driver"
+                    value="${driver}"/>
+                <!-- 使用配置文件db.properties中设置的url属性值给该url属性赋值 -->
+                <property
+                    name="url"
+                    value="${url}"/>
+                <!-- 使用配置文件db.properties中设置的username属性值给该username属性赋值 -->
+                <property
+                    name="username"
+                    value="${username}"/>
+                <!-- 使用配置文件db.properties中设置的password属性值给该password属性赋值 -->
+                <property
+                    name="password"
+                    value="${password}"/>
+            </dataSource>
+        </environment>
+    </environments>
+
+注意这里的关键点：
+
+* 默认的环境id（比如，``default=＂development＂``）。
+* 每个 environment 元素定义的环境 id（比如，``id=＂development＂``）。
+* 事务管理器的配置（比如，``type=＂JDBC＂``）。
+* 数据源的配置（比如，``type=＂POOLED＂``）。
+
+环境id可以随意命名，建议简洁有意义，而默认环境一定要匹配定义的其中一个环境id。
+
+``＜transactionManager.../＞`` 表示事务管理器配置，在 MyBatis 中有JDBC 和 MANAGED 两种类型的事务管理器：
+
+* JDBC。 这个配置直接使用了 JDBC 的提交和回滚设置，它依赖于从数据源得到的连接来管理事务范围。
+* MANAGED。 这个配置几乎没做什么。它从来不提交或回滚一个连接，而是让容器来管理事务的整个生命周期
+  （比如Java EE应用服务器的上下文）。默认情况下它会关闭连接，然而一些容器并不希望这样，
+  可以将 closeConnection 属性设置为 false 来阻止它默认的关闭行为。
+
+transactionManager的MANAGED配置示例如下：
+
+.. code:: xml
+
+    <transactionManager type="managed">
+        <property name="closeConnection" value="false"/>
+    </transactionManager>
+
+如果开发者使用Spring+MyBatis，则没有必要配置事务管理器，因为 Spring 模块会使用自带的管理器来覆盖MyBatis的事务管理器配置。
+
+``＜dataSource.../＞`` 表示数据源配置，在 MyBatis 中有UNPOOLED、POOLED和JNDI三种数据源类型：
+
+**UNPOOLED**。 这个数据源的实现只是每次被请求时打开和关闭连接。它对没有性能要求的简单应用程序是一个很好的选择。
+不同的数据库在这方面表现也是不一样的。UNPOOLED 类型的数据源仅仅需要配置以下5种属性：
+
+* driver。 这是 JDBC 驱动的 Java 类的完全限定名（并不是JDBC驱动中可能包含的数据源类）。
+* url。 这是数据库的JDBC URL地址。
+* username。 登录数据库的用户名。
+* password。 登录数据库的密码。
+* defaultTransactionIsolationLevel。 默认的连接事务隔离级别。
+
+**POOLED**： 这种数据源的实现利用“池”的概念将JDBC连接对象组织起来，避免了创建新的连接实例时所必需的初始化和认证时间。
+这是一种使得并发Web应用快速响应请求的流行处理方式。除了上述提到的UNPOOLED的5种属性外，
+还可以使用更多属性来配置 POOLED 的数据源：
+
+* poolMaximumActiveConnections。 在任意时间可以存在的活动（也就是正在使用）连接数量，默认值是 10。
+* poolMaximumIdleConnections。 任意时间可能存在的空闲连接数。
+* poolMaximumCheckoutTime。 在被强制返回之前，池中连接被检出（checked out）时间，默认值为20000 ms（即20 s）。
+* poolTimeToWait。 这是一个底层设置，如果获取连接花费相当长的时间，它会给连接池打印状态日志并重新尝试获取一个连接
+  （避免在误配置的情况下一直安静地失败），默认值为20000 ms（即20 s）。
+* poolPingQuery。 发送到数据库的侦测查询，用来检验连接是否处在正常工作秩序中并准备接受请求。默认是“NO PING QUERY SET”，
+  这会导致多数数据库驱动失败时带有一个恰当的错误消息。
+* poolPingEnabled。 是否启用侦测查询。若开启，也必须使用一个可执行的SQL语句设置 poolPingQuery 属性
+  （最好是一个非常快的 SQL），默认值为false。
+* poolPingConnectionsNotUsedFor。 配置 poolPingQuery 的使用频度。其可以被设置成匹配具体的数据库连接超时时间，
+  来避免不必要的侦测，默认值为0（即所有连接每一时刻都被侦测，当然仅当poolPingEnabled 为 true 时适用）。
+
+**JNDI**。 这个数据源的实现是为了能在如 EJB 或应用服务器这类容器中使用，容器可以集中或在外部配置数据源，然后放置一个 JNDI上下文的引用。这种数据源配置只需要两个属性：
+
+* initial_context。 这个属性用来在InitialContext中寻找上下文（即 initialContext.lookup （initial_context））。
+  这是个可选属性，如果忽略，那么 data_source 属性将会直接从InitialContext 中寻找。
+* data_source。 这是引用数据源实例位置的上下文路径。若提供了initial_context配置则会在其返回的上下文中进行查找，
+  没有提供则直接在InitialContext中查找。dataSource的JDNI配置示例如下：
+
+.. code:: xml
+
+    <dataSource type="JNDI">
+        <property name="initial_context" value="java：/comp/env">
+        <property name="data_source" value="fkjavads">
+    </dataSource>
+
+其中 ``java：/comp/env`` 是Tomcat服务器的前缀，每个Web服务器的前缀都不一样，具体请查看Web服务器相关文档。
+
+9.2.8 mapper映射器
+++++++++++++++++++++++
+
+MyBatis需要开发者自己写SQL语句，mapper映射器告诉 MyBatis 到哪里去找映射文件，进而找到这些SQL语句。
+在实际开发中可以使用相对于类路径的资源引用或完全限定资源定位符（包括 file：///的 URL），以及类名和包名等。例如：
+
+.. code:: xml
+
+    <!-- mappers告诉了MyBatis去哪里找持久化类的映射文件 -->
+    <!-- 使用类路径查找资源文件 -->
+    <mappers>
+        <mapper resource="org/fkit/mapper/UserMapper.xml"/>
+    </mappers>
+    <!-- 使用接口类名 -->
+    <mappers>
+        <mapper resource="forg/fkit/mapper/UserMapper"/>
+    </mappers>
+    <!-- 使用包名 -->
+    <mappers>
+        <mapper resource="forg.fkit.mapper"/>
+    </mappers>
+    <!-- 使用本地文件 -->
+    <mappers>
+        <mapper resource="file:///C:/mapper/UserMapper.xml"/>
+    </mappers>
+
+mapper映射器会告诉MyBatis去哪里找映射文件，剩下的细节就是每个SQL映射文件了，也就是接下来我们要重点讨论的。
+
+9.3 MyBatis日志信息配置
+--------------------------
+
+使用MyBatis的时候，经常需要输出SQL语句、参数信息、查询结果等日志信息，为此MyBatis也提供了非常简单有效的解决方案。
+MyBatis内置的日志工厂提供日志功能，具体的日志实现有以下几种工具：
+
+* SLF4J
+* Apache Commons Logging
+* Log4j 2
+* Log4j
+* JDK logging
+
+具体选择哪个日志实现工具由MyBatis的内置日志工厂决定。它会使用最先找到的（按上文列举的顺序查找）。如果一个都未找到，
+日志功能就会被禁用。
+
+不少应用服务器的 classpath 中已经包含 Apache Commons Logging，如 Tomcat 和WebShpere，
+所以MyBatis会把它作为具体的日志实现。记住这点非常重要。这将意味着，在诸如 WebSphere的环境中
+WebSphere提供了Apache Commons Logging的私有实现，你的Log4j配置将被忽略。不过，
+如果你的应用部署在一个包含Apache Commons Logging的环境里，而你又想用其他的日志框架比如Log4j，
+可以通过在 MyBatis的配置文件mybatis-config.xml里面添加一项setting（配置）来选择一个不同的日志实现。
+这也是MyBatis推荐的做法。
+
+.. code:: xml
+
+    <configuration>
+        ......
+        <settings>
+            <setting name="logImpl" value="LOG4J"/>
+        </settings>
+        ......
+    </configuration>
+
+这样就是告诉MyBatis当前项目的日志实现使用Log4j，Log4j的配置信息就会起作用。
+
+logImpl可选的值有：SLF4J、LOG4J、LOG4J2、JDK_LOGGING、COMMONS_LOGGING、STDOUT_LOGGING、
+NO_LOGGING 或者是实现了接口 ``org.apache.ibatis.logging.Log`` 的类的完全限定类名，
+并且这个类的构造函数需要以一个字符串（String类型）为参数。具体可以参考
+``org.apache.ibatis.logging.slf4j.Slf4jImpl.java`` 的实现。
+
+MyBatis可以对包、类、命名空间和全限定的语句记录日志。
+具体怎么做，视使用的日志框架而定，这里以Log4j为例。配置日志功能非常简单：首先增加依赖的jar包，
+如log4j.jar，log4j.jar可以直接在mybatis-3.4.5解压文件夹下的lib文件夹中找到，也可以自己去官网下载。
+
+再添加配置文件，有log4j.properties或log4j.xml两种，下面分别讲解两种配置文件。
+
+9.3.1 log4j.properties配置日志
+++++++++++++++++++++++++++++++++
+
+比如需要记录这个mapper接口的日志：
+
+.. code:: java
+
+    package org.fkit.mapper;
+    public interface UserMapper {
+        @Select("SELECT * FROM TB_USER WHERE id = #{id}")
+        User selectUser(int id);
+    }
+
+在应用的CLASSPATH中增加一个名称为log4j.properties的文件，文件的具体内容如下：
+
+.. code:: xml
+
+    log4j.rootLogger = ERROR,stdout
+    log4j.logger.org.fkit.mapper.UserMapper = TRACE
+    log4j.appender.stdout = org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout = org.apache.log4j.PatternLayout
+    log4j.appender.stdout.layout.ConversionPattern = [%-5p] %d{yyyy-MM-dd HH:mm:ss,SSS} method:%l%n%m%n
+
+添加以上配置后，Log4j就会把 org.fkit.mapper.UserMapper的TRACE（详细执行）日志记录下来，
+对于应用中的其他类则仅仅记录ERROR（错误信息）。
+
+也可以将日志从整个mapper接口级别调整到语句级别，从而实现更细粒度的控制。如下配置只记录 selectUser 语句的日志：
+
+.. code:: xml
+
+    log4j.logger.org.fkit.mapper.UserMapper.selectUser = TRACE
+
+也可以对一组mapper接口记录日志，只要对mapper接口所在的包开启日志功能即可：
+
+.. code:: xml
+
+    log4j.logger.org.fkit.mapper = TRACE
+
+某些查询可能会返回大量的数据，如果只想记录其执行的 SQL 语句该怎么办？为此，MyBatis中SQL语句的日志级别被设为
+DEBUG（JDK Logging中为FINE），结果日志的级别为TRACE（JDK Logging中为FINER）。所以，只要将日志级别调整为DEBUG即可：
+
+.. code:: xml
+
+    log4j.logger.org.fkit.mapper = DEBUG
+
+如果要记录日志的是类似下面的mapper文件而不是mapper接口又该怎么办呢？
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper 
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <mapper namespace="org.fkit.mapper.UserMapper">
+        <select id="selectUser" resultType="Blog">
+            SELECT * FROM TB_USER WHERE id = #{id}
+        </select>
+    </mapper>
+
+只要对命名空间增加日志记录功能即可：
+
+.. code:: xml
+
+    log4j.logger.org.fkit.mapper = TRACE
+
+9.3.2 log4j.xml配置日志
++++++++++++++++++++++++++++++
+
+之前的Java项目都是采取properties文件作为配置文件，而最新的项目大多采用XML文件作为配置文件。
+
+在应用的CLASSPATH中增加一个名称为log4j.xml的文件，文件的具体内容如下：
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE log4j:configuration SYSTEM "log4j.dtd">  
+    <log4j:configuration xmlns:log4j="http://jakarta.apache.org/log4j/">  
+        <appender name="STDOUT" class="org.apache.log4j.ConsoleAppender">  
+            <layout class="org.apache.log4j.PatternLayout">  
+                <param name="ConversionPattern" value="%5p [%t] %m%n" />  
+            </layout>  
+        </appender>   
+        <logger name="org.fkit.mapper.UserMapper">  
+            <level value="DEBUG" />  
+        </logger> 
+        <root>  
+            <level value="ERROR" />  
+            <appender-ref ref="STDOUT" />  
+        </root>  
+    </log4j:configuration> 
+
+添加以上配置后，Log4j就会把 org.fkit.mapper.UserMapper的TRACE（详细执行）日志记录下来，对于应用中的其他类则仅仅记录ERROR（错误信息）。
+
+也可以将日志从整个mapper接口级别调整到语句级别，从而实现更细粒度的控制。如下配置只记录 selectUser 语句的日志：
+
+.. code:: xml
+
+    <logger name="org.fkit.mapper.UserMapper.selectUser">  
+        <level value="TRACE" />  
+    </logger> 
+
+也可以对一组mapper接口记录日志，只要对mapper接口所在的包开启日志功能即可：
+
+.. code:: xml
+
+    <logger name="org.fkit.mapper">  
+        <level value="TRACE" />  
+    </logger> 
+
+某些查询可能会返回大量的数据，如果只想记录其执行的 SQL 语句该怎么办？为此，MyBatis中SQL
+语句的日志级别被设为 DEBUG（JDK Logging中为FINE），结果日志的级别为TRACE（JDK Logging中为FINER）。
+所以，只要将日志级别调整为DEBUG即可：
+
+.. code:: xml
+
+    <logger name="org.fkit.mapper">  
+        <level value="DEBUG" />  
+    </logger> 
+
+如果要记录日志的是类似下面的mapper文件而不是mapper接口又该怎么办呢？
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <mapper namespace="org.fkit.mapper.UserMapper">
+        <select id="selectUser" parameterType="int" resultType="user">
+            SELECT * FROM TB_USER WHERE id = #{id}
+        </select>
+    </mapper>
+
+只要对命名空间增加日志记录功能即可：
+
+.. code:: xml
+
+    <logger name="org.fkit.mapper.UserMapper">  
+        <level value="TRACE" />  
+    </logger>
+
+9.4 深入Mapper XML映射文件
+----------------------------
+
+MyBatis的真正强大之处在于它的映射语句，这也是它的魔力所在。由于它的功能异常强大，
+映射器的XML文件就显得相对简单。如果拿它跟具有相同功能的JDBC代码进行对比，
+你会立即发现省掉了将近95%的代码。MyBatis就是针对SQL构建的，并且比普通的方法做得更好。
+
+SQL映射文件常用的元素如下：
+
+* **select**。 映射查询语句。
+* **insert**。 映射插入语句。
+* **update**。 映射更新语句。
+* **delete**。 映射删除语句。
+* **sql**。 可被其他语句引用的可重用语句块。
+* **cache**。 给定命名空间的缓存配置。
+* **cache-ref**。 其他命名空间缓存配置的引用。
+* **resultMap**。 最复杂也是最强大的元素，用来描述如何从数据库结果集中加载对象。
+
+.. note::
+
+    parameterMap已废弃！它是老式风格的参数映射。
+
+9.4.1 select
+++++++++++++++++
+
+select元素用来映射查询语句，它是MyBatis中最常用的元素之一。
+
+执行简单查询的select元素是非常简单的。例如：
+
+.. code:: xml
+
+    <select id="selectUser" parameterType="int" resultType="hashmap">
+        select * from tb_user where id = #{id}
+    </select>
+
+这个语句被称作 selectUser，其接受一个 int（或 Integer）类型的参数，并返回一个HashMap 类型的对象，
+HashMap中的键是列名，值便是结果行中的对应值。
+
+注意参数符号 ``＃{id}`` ，这是告诉MyBatis创建一个预处理语句参数。通过JDBC，这样的一个参数在 SQL 
+中会由一个 ``？`` 来标识，并被传递到一个新的预处理语句中。以上 MyBatis配置文件执行时会生成如下JDBC代码：
+
+.. code:: java
+
+    String selectUser="select * from tb_user where id=?";
+    PrepareStatement ps=conn.prepareStatement(selectUser);
+    ps.setInt(1,id);
+
+select元素有很多属性可以配置，它们用来决定每条语句的作用细节。例如：
+
+.. code:: xml
+
+    <select
+        id="selectUser"
+        parameterType="int"
+        resultType="hashmap"
+        resultMap="userResultMap"
+        flushCache="false"
+        useCacher="true"
+        timeout="10000"
+        fetchSize="256"
+        statementType="PREPARED"
+        resultSetType="FORWARD_ONLY">
+
+``select`` 元素的属性描述如下：
+
+* id。 在命名空间中唯一的标识符，可以被用来引用这条语句。
+* parameterType。 将会传入这条语句的参数类的完全限定名或别名。这个属性是可选的，
+  因为 MyBatis 可以通过 TypeHandler 推断出具体传入语句的参数，默认值为unset。
+* resultType。 从这条语句中返回的期望类型的类的完全限定名或别名。注意如果是集合情形，
+  那应该是集合可以包含的类型，而不能是集合本身。返回时可以使用resultType或resultMap，
+  但不能同时使用。
+* resultMap。 外部 resultMap 的命名引用。结果集的映射是 MyBatis最强大的特性，
+  对其有一个很好的理解的话，许多复杂映射的情形都能迎刃而解。返回时可以使用resultMap 或 resultType，
+  但不能同时使用。
+* flushCache。 如果设置为 true，则任何时候只要语句被调用，都会导致本地缓存和二级缓存都被清空，
+  默认值为false。
+* useCache。 如果设置为 true，将会导致本条语句的结果被二级缓存，在select 元素当中默认值为 true。
+* timeout。 这个设置是在抛出异常之前，驱动程序等待数据库返回请求结果的秒数。默认值为 unset（依赖驱动）。
+* fetchSize。 其尝试使得驱动程序每次批量返回的结果行数和这个设置值相等。默认值为 unset（依赖驱动）。
+* statementType。 值为 STATEMENT、PREPARED 或 CALLABLE。这会让 MyBatis分别使用 JDBC 中的 Statement、
+  PreparedStatement 或 CallableStatement，默认值为PREPARED。
+* resultSetType。 结果集的类型，值为 FORWARD_ONLY、SCROLL_SENSITIVE 或SCROLL_INSENSITIVE，
+  默认值为unset（依赖驱动）。
+* databaseId。 如果配置了databaseIdProvider，MyBatis会加载所有的不带databaseId或匹配当前 databaseId 
+  的语句；如果带或者不带的语句都有，则不带的会被忽略。
+* resultOrdered。 这个设置仅针对嵌套结果 select 语句适用：如果为true，就是假设包含了嵌套结果集或分组，
+  这样的话当返回一个主结果行的时候，就不会发生对前面结果集引用的情况。这就使得在获取嵌套的结果集时不至于导致内存不够用。默认值为false。
+* resultSets。 这个设置仅对多结果集的情况适用，它将列出语句执行后返回的结果集并给每个结果集起一个名称，
+  名称是逗号分隔的。
+
+9.4.2 insert、update和delete
+++++++++++++++++++++++++++++++
+
+insert、update和delete元素用来映射DML语句，是MyBatis中最常用的元素之一。
+
+insert、update和delete元素配置和select非常接近。例如：
+
+.. code:: xml
+
+    <insert
+        id="insertUser"
+        parameterType="org.fkit.domain.User"
+        flushCacher="true"
+        statementType="PREPARED"
+        keyProperty=""
+        keyColumn=""
+        useGeneratedKeys=""
+        timeout="20">
+    <update
+        id="updateUser"
+        parameterType="org.fkit.domain.User"
+        flushCache="true"
+        statementType="PREPARED"
+        timeout="20">
+    <delete
+        id="deleteUser"
+        parameterType="org.fkit.domain.User"
+        flushCache="true"
+        statementType="PREPARED"
+        timeout="20">
+
+insert、update 和 delete元素的属性大多和select的一致，它们特有的属性描述如下：
+
+useGeneratedKeys。 （仅对 insert 和 update 有用）这会令 MyBatis使用 JDBC 的getGeneratedKeys 
+方法来获取由数据库内部生成的主键（比如，像 MySQL 和 SQL Server这样的关系数据库管理系统的自动递增字段），
+默认值为false。
+
+keyProperty。 （仅对 insert 和 update 有用）唯一标记一个属性，MyBatis 会通过getGeneratedKeys
+的返回值或者通过insert语句的selectKey子元素设置它的键值，默认为unset。如果希望得到多个生成的列，
+也可以是逗号分隔的属性名称列表。
+
+keyColumn。 （仅对insert和update有用）通过生成的键值设置表中的列名，这个设置仅对某些数据库
+（像PostgreSQL）是必须的，当主键列不是表中的第一列时需要设置。如果希望得到多个生成的列，
+也可以是逗号分隔的属性名称列表。
+
+下面是insert、update和delete语句的示例：
+
+.. code:: xml
+
+    <insert id="insertUser"
+        insert into tb_user(id,username,password,email,address)
+        values(#{id},#{username},#{password},#{email},#{address})
+    </insert>
+    <update id="updateUser">
+        update tb_user set
+        username=#{username},
+        password=#{password},
+        email=#{email},
+        address=#{id}
+        where id=#{id}
+    </update>
+    <delete id="deleteUser">
+        delete from tb_user where id=#{id}
+    </delete>
+
+而插入语句的配置规则更加丰富，因为在插入语句执行时很多时候是需要返回插入成功的数据生成的主键值的，
+所以 ``＜insert.../＞`` 元素里面有一些额外的属性和子元素用来处理主键的生成，而且根据数据库的主键生成策略不同，
+配置也有多种方式。
+
+首先，如果数据库支持自动生成主键的字段（比如 MySQL 和 SQL Server），那么可以设置 
+``useGeneratedKeys=＂true＂``，然后再把keyProperty 设置到目标属性上就可以了（一般会设置到id属性上）。例如，
+如果上面的 TB_USER 表已经对id使用了自动生成的列类型，那么语句可以修改为：
+
+.. code:: xml
+
+    <insert id="insertUser" useGeneratedKeys="true" keyProperty="id">
+        insert into tb_user(username,password,email,address)
+        value(#{username},#{password},#{email},#{address})
+    </insert>
+
+对于不支持自动生成类型的数据库（比如Oracle）或可能不支持自动生成主键的JDBC驱动来说，
+MyBatis 有另外一种方法来生成主键。
+
+.. code:: xml
+
+    <insert id="insertUser">
+        <selectKey keyProperty="id" resultType="int" order="BEFORM">
+            select SEQUENCE_TB_USER.nextval as id from dual
+        </selectKey>
+        insert into tb_user(id,username,password,email,address)
+        value(#{id},#{username},#{password},#{email},#{address})
+    </insert>
+
+在上面的示例中，selectKey 元素将会首先运行，其通过查询SEQUENCE序列，TB_USER的 id 会被设置，
+然后插入语句会被调用。
+
+selectKey 元素描述如下：
+
+.. code:: xml
+
+    <selectKey
+        keyProperty="id"
+        resultType="int"
+        order="BEFORE"
+        statementType="PREPARED">
+
+* keyProperty。 selectKey语句结果应该被设置到目标属性（一般会设置到id属性）上。如果希望得到多个生成的列，
+  也可以是逗号分隔的属性名称列表。
+* keyColumn。 匹配属性的返回结果集中的列名称。如果希望得到多个生成的列，也可以是逗号分隔的属性名称列表。
+* resultType。 结果的类型。MyBatis通常可以推算出来，但是为了更加确定，建议明确写出。MyBatis 
+  允许任何简单类型用作主键的类型，包括字符串。如果希望作用于多个生成的列，则可以使用一个包含期望属性的Object或一个Map。
+* order。 可以被设置为BEFORE或AFTER。如果设置为BEFORE，那么它会首先选择主键，设置 
+  keyProperty然后执行插入语句。如果设置为 AFTER，那么先执行插入语句，然后是selectKey元素。
+* statementType。 与前面相同，MyBatis支持STATEMENT、PREPARED和CALLABLE语句的映射类型，
+  分别代表Statement、PreparedStatement 和 CallableStatement 类型。
+
+9.4.3 sql
++++++++++++++
+
+sql元素可以被用来定义可重用的SQL代码段，可以包含在其他语句中。它可以被静态地（在加载参数时）参数化。
+不同的属性值通过包含的实例发生变化。例如：
+
+.. code:: xml
+
+    <sql id="userColumns">${alias}.id,${alias}.username,${alias}.password</sql>
+
+这个 SQL 片段可以被包含在其他语句中，例如：
+
+.. code:: xml
+
+    <select id="selectUser" resultTyep="map">
+        select
+        <include refid="userColumns">
+            <property name="alias" value="t1"/>
+        </include>
+        from some_table t1
+    </select>
+
+属性值可以用于包含的refid属性或者包含的字句里面的属性，例如：
+
+.. code:: xml
+
+    <sql id="sometable">
+        ${prefix} Table
+    </sql>
+    <sql id="sometable">
+        from
+        <include refid="${include_target}">
+    </sql>
+    <select id="select" resultType="map">
+        select
+        field1,field2,field3
+        <include refid="someinclude">
+            <property name="prefix" value="some"/>
+            <property name="include_target" value="sometable">
+        </include>
+    </select>
+
+9.4.4 参数（Parameters）
+++++++++++++++++++++++++++
+
+前面的所有语句中所见到的都是简单参数的例子，实际上参数是MyBatis非常强大的元素。对于简单参数的使用，
+大多数情况下参数都很少，例如：
+
+.. code:: xml
+
+    <select id="selectUser" parameterType="int" resultType="User">
+        select id,username,password
+        from users
+        where id=#{id}
+    <select>
+
+上面的这个示例说明了一个非常简单的命名参数映射。参数类型被设置为 int，这样这个参数就可以被设置成任何内容。
+原生的类型或简单数据类型（比如整型和字符串），因为没有相关属性，会完全用参数值来替代。
+
+但是，如果传入一个复杂的对象（比如User），行为就会有一点不同了。例如：
+
+.. code:: xml
+
+    <insert id="insertUser" parameterType="User">
+        insert into users(id,username,password)
+        value(#{id},#{username},#{password})
+    </insert>
+
+如果User类型的参数对象被传递到了语句中，如 ``＃{id}`` 语句则会查找参数对象User的id属性，
+``＃{username}`` 和 ``＃{password}`` 也是一样，然后将它们的值传入预处理语句的参数中。
+
+**示例：测试select、insert、update和delete操作**
+
+本示例直接使用第8章创建的TB_USER表、数据库脚本、User.java和log4j.xml，具体请参考第8章内容，此处不再赘述。
+
+在实际项目开发中，连接数据库的参数信息不会直接写在mybatis-config.xml中，而是通过一个properties文件定义连接数据库的参数信息，
+并在mybatis-config.xml中引用。
+
+程序清单：codes/09/DMLTest/src/db.properties
+
+.. code::
+
+    driver=com.mysql.jdbc.Driver
+    url=jdbc:mysql://127.0.0.1:3306/mybatis
+    username=root
+    password=root
+
+程序清单：codes/09/DMLTest/src/mybatis-config.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8" ?>
+    <!DOCTYPE configuration
+    PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-config.dtd">
+    <!-- XML 配置文件包含对 MyBatis 系统的核心设置 -->
+    <configuration>
+        <!-- 引入properties资源文件,以便后面使用 -->
+        <properties resource="db.properties"/>
+        <!-- 指定 MyBatis 所用日志的具体实现 -->
+        <settings>
+            <setting
+                name="logImpl"
+                value="LOG4J"/>
+        </settings>
+        <!-- 设置别名 -->
+        <typeAliases>
+            <typeAlias
+                alias="user"
+                type="org.fkit.domain.User"/>
+        </typeAliases>
+        <!-- 环境配置，即连接的数据库。 -->
+        <environments default="mysql">
+            <environment id="mysql">
+                <!-- 指定事务管理类型，type="JDBC"指直接简单使用了JDBC的提交和回滚设置 -->
+                <transactionManager type="JDBC"/>
+                <dataSource type="POOLED">
+                    <!-- 使用配置文件db.properties中设置的driver属性值给该driver属性赋值 -->
+                    <property
+                        name="driver"
+                        value="${driver}"/>
+                    <!-- 使用配置文件db.properties中设置的url属性值给该url属性赋值 -->
+                    <property
+                        name="url"
+                        value="${url}"/>
+                    <!-- 使用配置文件db.properties中设置的username属性值给该username属性赋值 -->
+                    <property
+                        name="username"
+                        value="${username}"/>
+                    <!-- 使用配置文件db.properties中设置的password属性值给该password属性赋值 -->
+                    <property
+                        name="password"
+                        value="${password}"/>
+                </dataSource>
+            </environment>
+        </environments>
+        <!-- mappers告诉了MyBatis去哪里找持久化类的映射文件 -->
+        <mappers>
+            <mapper resource="org/fkit/mapper/UserMapper.xml"/>
+        </mappers>
+    </configuration>
+
+mybatis-config.xml中的 ``＜properties resource=＂db.properties＂/＞`` 配置表示引入
+db.properties资源配置文件，``＜property name=＂driver＂ value=＂${driver}＂/＞``
+表示driver的值引用db.properties文件中的名称为 driver 的值 ``com.mysql.jdbc.Driver``。
+``${url}``、``${username}`` 和 ``${password}`` 引用 db.properties 文件中对应的 url、
+username和password的值。
+
+程序清单：
+codes/09/DMLTest/src/org/fkit/mapper/UserMapper.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <!-- namespace指用户自定义的命名空间。 -->
+    <mapper namespace="org.fkit.mapper.UserMapper">
+        <!-- insert操作
+            parameterType="user"表示该插入语句需要一个user对象作为参数
+            useGeneratedKeys="true"表示使用自动增长的主键 -->
+        <insert
+            id="saveUser"
+            parameterType="user"
+            useGeneratedKeys="true"
+            keyProperty="id"> insert into tb_user(name,sex,age) values(#{name},#{sex},#{age})
+        </insert>
+        <!-- select操作
+            parameterType="int"表示该查询语句需要一个int类型的参数
+            resultType="user"表示返回的是一个user对象 -->
+        <select
+            id="selectUser"
+            parameterType="int"
+            resultType="user"> select * from tb_user where id = #{id}
+        </select>
+        <!-- update操作
+            parameterType="user"表示该更新语句需要一个user对象作为参数 -->
+        <update
+            id="modifyUser"
+            parameterType="user"> update tb_user set name = #{name},sex = #{sex},age = #{age} where id = #{id}
+        </update>
+        <!-- delete操作 parameterType="int"表示该查询语句需要一个int类型的参数 -->
+        <delete
+            id="removeUser"
+            parameterType="int"> delete from tb_user where id = #{id}
+        </delete>
+    </mapper>
+
+在UserMapper.xml中定义了insert、update、delete和select 4个元素，分别对应插入、更新、删除和查询4个数据库操作。
+
+因为每次测试都需要读取 mybatis-config.xml 根配置文件，根据根配置文件信息创建SqlSessionFactory 对象，
+再获取 SqlSession 对象，使得该操作比较频繁，所以开发一个FKSqlSessionFactory工厂类封装以上操作的重复代码。
+
+程序清单：
+codes/09/DMLTest/src/org/fkit/factory/FKSqlSessionFactory.java
+
+.. code:: java
+
+    public class FKSqlSessionFactory {
+        private static SqlSessionFactory sqlSessionFactory = null;
+        // 初始化创建SqlSessionFactory对象
+        static
+        {
+            try (// 读取mybatis-config.xml文件
+                    InputStream is = Resources.getResourceAsStream("mybatis-config.xml");)
+            {
+                sqlSessionFactory = new SqlSessionFactoryBuilder().build(is);
+            } catch (Exception e)
+            {
+                e.printStackTrace();
+            }
+        }
+        // 获取SqlSession对象的静态方法
+        public static SqlSession getSqlSession()
+        {
+            return sqlSessionFactory.openSession();
+        }
+        // 获取SqlSessionFactory的静态方法
+        public static SqlSessionFactory getSqlSessionFactory()
+        {
+            return sqlSessionFactory;
+        }
+    }
+
+首先测试 ``＜insert.../＞`` 元素。
+
+程序清单：codes/09/DMLTest/src/org/fkit/test/InsertTest.java
+
+.. code:: java
+
+    public class InsertTest {
+        public static void main(String[] args)
+        {
+            // 定义SqlSession变量
+            SqlSession sqlSession = null;
+            try
+            {
+                // 1.创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                // 2.创建User对象
+                User user = new User("jack", "男", 22);
+                // 3.插入数据
+                sqlSession.insert("org.fkit.mapper.UserMapper.saveUser", user);
+                // 4.提交事务
+                sqlSession.commit();
+            } catch (Exception e)
+            {
+                // 回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            } finally
+            {
+                // 关闭SqlSession
+                if (sqlSession != null)
+                    sqlSession.close();
+            }
+        }
+    }
+
+运行InsertTest类的main方法，创建User对象，并将User对象作为参数调用SqlSession的insert方法，
+insert方法的第一个参数是 ``org.fkit.mapper.UserMapper.saveUser``，MyBatis会找到 
+``org.fkit.mapper.UserMapper`` 命名空间下id=＂saveUser＂的元素，执行该元素中的SQL语句。
+
+.. code:: xml
+
+    <insert
+        id="saveUser"
+        parameterType="user"
+        useGeneratedKeys="true"
+        keyProperty="id">
+        insert into tb_user(name,sex,age) values(#{name},#{sex},#{age})
+    </insert>
+
+``＜insert.../＞`` 元素中的 ``parameterType=＂user＂`` 表示该插入语句需要一个 User 
+对象作为参数；``useGeneratedKeys=＂true＂`` 表示使用数据库的自动增长的主键，该操作需要底层数据库的支持；
+``keyProperty=＂id＂`` 表示将插入数据生成的主键设置到user对象的id当中。元素中的SQL语句是一条标准的
+``INSERT INTO`` 语句，需要注意的是，``＃{name}`` 使用了MyBatis的表达式，
+其会查找参数user当中的name属性作为值并将其设置到SQL语句中；如果传入的参数是一个Map，
+则会以name作为key查找Map当中的值并将其设置到SQL语句中。``＃{sex}``、``＃{age}`` 和 ``＃{name}`` 操作相同。
+
+运行InsertTest类的main方法，将会插入一条数据到数据库当中。控制台结果如下所示：
+
+.. code:: 
+
+    DEBUG [main] ==>  Preparing: insert into tb_user(name,sex,age) values(?,?,?) 
+    DEBUG [main] ==> Parameters: jack(String), 男(String), 22(Integer)
+    DEBUG [main] <==    Updates: 1
+
+插入数据后数据库表数据如图9.2所示。
+
+图9.2 测试 ``＜insert.../＞`` 元素
+
+.. figure:: /_static/images/0902.png
+   :alt: 
+
+接下来测试 ``＜select.../＞`` 元素。
+
+程序清单：codes/09/DMLTest/src/org/fkit/test/SelectTest.java
+
+.. code:: java
+
+    public class SelectTest {
+        public static void main(String[] args)  {
+            // 定义SqlSession变量
+            SqlSession sqlSession = null;
+            try {
+                // 创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                // 根据id查询User对象
+                User user = sqlSession.selectOne("org.fkit.mapper.UserMapper.selectUser",1);
+                System.out.println(user);
+                // 提交事务
+                sqlSession.commit();
+            } catch (Exception e) {
+                // 回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            }finally {
+                // 关闭SqlSession
+                if(sqlSession != null) 
+                    sqlSession.close();
+            }				
+        }
+    }
+
+运行SelectTest类的main方法，调用SqlSession的select方法，selectOne方法的第一个参数是
+``org.fkit.mapper.UserMapper.selectUser``，MyBatis会找到 ``org.fkit.mapper.UserMapper`` 
+命名空间下 ``id=＂selectUser＂`` 的元素，执行该元素中的SQL语句。
+
+.. code:: xml
+
+    <select
+        id="selectUser"
+        parameterType="int"
+        resultType="user">
+        select * from tb_user where id = #{id}
+    </select>
+
+``＜select.../＞`` 元素中的
+
+* parameterType=＂int＂表示该插入新语句需要一个int类型的值作为参数；
+* resultType=＂user＂表示该条查询语句需要返回一个 User 对象。
+* 元素中的 SQL语句是一条标准的SELECT语句，该语句需要的参数id值正是调用时传入的int值。
+
+运行SelectTest类的main方法，程序将会到数据库当中查询id为1的一条数据并封装成User类型的对象返回。控制台结果如下所示：
+
+.. code:: xml
+
+    DEBUG [main] ==>  Preparing: select * from tb_user where id = ? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 1
+    User [id=1, name=admin, sex=男, age=26]
+
+接下来测试 ``＜update.../＞`` 元素。
+
+程序清单：codes/09/DMLTest/src/org/fkit/test/UpdateTest.java
+
+.. code:: java
+
+    public class UpdateTest {
+        public static void main(String[] args)
+        {
+            // 定义SqlSession变量
+            SqlSession sqlSession = null;
+            try
+            {
+                // 1.创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                // 2.根据id查询User对象
+                User user = sqlSession.selectOne("org.fkit.mapper.UserMapper.selectUser", 1);
+                // 3.修改User对象的属性值
+                user.setName("tom");
+                user.setAge(25);
+                // 4.修改User对象
+                sqlSession.update("org.fkit.mapper.UserMapper.modifyUser", user);
+                // 5.提交事务
+                sqlSession.commit();
+            } catch (Exception e)
+            {
+                // 6.回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            } finally
+            {
+                // 关闭SqlSession
+                if (sqlSession != null)
+                    sqlSession.close();
+            }
+        }
+    }
+
+运行UpdateTest类的main方法，首先调用SqlSession的selectOne方法，查询出id为1的数据返回给User对象。
+接下来修改该User对象的属性值，最后调用SqlSession的update方法修改该 User 对象。update 
+方法的第一个参数是 ``org.fkit.mapper.UserMapper.updateUser``，MyBatis会找到 ``org.fkit.mapper.UserMapper``
+命名空间下 ``id=＂modifyUser＂`` 的元素，执行该元素中的SQL语句。
+
+.. code:: xml
+
+    <update
+        id="modifyUser"
+        parameterType="user">
+        update tb_user set name = #{name},sex = #{sex},age=#{age} where id = #{id}
+    </update>
+
+``＜update../＞`` 元素中的 ``parameterType=＂user＂`` 表示该更新语句需要一个 user 
+对象作为参数。元素中的SQL语句是一条标准的UPDATE语句，该语句根据传入的User对象的属性更新表数据。
+运行UpdateTest类的main方法，我们将会看到数据库中的更新数据。控制台结果如下所示：
+
+.. code:: xml
+
+    DEBUG [main] ==>  Preparing: select * from tb_user where id = ? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 1
+    DEBUG [main] ==>  Preparing: update tb_user set name = ?,sex = ?,age = ? where id = ? 
+    DEBUG [main] ==> Parameters: tom(String), 男(String), 25(Integer), 1(Integer)
+    DEBUG [main] <==    Updates: 1
+
+更新数据后数据库表数据如图9.3所示。
+
+图9.3 测试 ``＜update.../＞`` 元素
+
+.. figure:: /_static/images/0903.png
+   :alt: 
+
+接下来测试 ``＜delete.../＞`` 元素。
+
+
+程序清单：codes/09/DMLTest/src/org/fkit/test/DeleteTest.java
+
+.. code:: java
+
+    public class DeleteTest {
+        public static void main(String[] args)
+        {
+            // 定义SqlSession变量
+            SqlSession sqlSession = null;
+            try
+            {
+                // 1.创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                // 2.删除id为1的User对象
+                sqlSession.delete("org.fkit.mapper.UserMapper.removeUser", 1);
+                // 3.提交事务
+                sqlSession.commit();
+            } catch (Exception e)
+            {
+                // 4.回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            } finally
+            {
+                // 5.关闭SqlSession
+                if (sqlSession != null)
+                    sqlSession.close();
+            }
+        }
+    }
+
+运行DeleteTest类的main方法，调用SqlSession的delete方法。delete 方法的第一个参数是 
+``org.fkit.mapper.UserMapper.removeUser``，
+MyBatis会找到 ``org.fkit.mapper.UserMapper`` 命名空间下的 ``id=＂removeUser＂`` 的元素，
+执行该元素中的SQL语句。
+
+.. code:: xml
+
+    <delete id="removeUser" parameterType="int"> 
+        delete from tb_user where id = #{id}
+    </delete>
+
+``＜delete.../＞`` 元素中的 ``parameterType=＂int＂`` 表示该删除语句需要一个int类型的值作为参数。
+元素中的SQL语句是一条标准的DELETE语句，该语句需要的参数id值正是调用时传入的int值。
+
+运行DeleteTest类的main方法，会将数据库当中id为1的数据删除。
+控制台结果如下所示：
+
+.. code:: xml
+
+    DEBUG [main] ==>  Preparing: delete from tb_user where id = ? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==    Updates: 1
+
+9.4.5 ResultMaps
+++++++++++++++++++++++
+
+resultMap元素是MyBatis中最重要最强大的元素。它的作用是告诉MyBatis将从结果集中取出的数据转换成开发者所需要的对象。
+
+下面是最简单的映射语句示例：
+
+.. code:: xml
+
+    <select id="selectUser" resultType="map">
+        select * from tb_user
+    </select>
+
+selectUser 的 ``＜select.../＞`` 元素执行一条查询语句，查询 TB_USER 表的所有数据。``resultType=＂map＂`` 
+表示返回的数据是一个Map集合（使用列名作为key，列值作为value）。
+
+**示例：测试ResultMaps**
+
+程序清单：
+codes/09/ResultMapTest/src/org/fkit/test/SelectMapTest.java
+
+.. code:: java
+
+    public class SelectMapTest {
+        public static void main(String[] args)
+        {
+            // 1.定义SqlSession变量
+            SqlSession sqlSession = null;
+            try
+            {
+                // 2.创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                // 3.查询TB_USER表所有记录,每一条记录都封装Map,
+                // 该记录的属性作为key,属性值作为value
+                List<Map<String, Object>> list = sqlSession
+                    .selectList("org.fkit.mapper.UserMapper.selectUser");
+                // 遍历List集合，打印每一个Map对象
+                list.forEach(row -> System.out.println(row));
+                // 4.提交事务
+                sqlSession.commit();
+            } catch (Exception e)
+            {
+                // 5.回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            } finally
+            {
+                // 关闭SqlSession
+                if (sqlSession != null)
+                    sqlSession.close();
+            }
+        }
+    }
+
+执行之前先往TB_USER表中插入几条测试数据，SQL脚本如下：
+
+.. code:: sql
+
+    INSERT INTO tb_user2 VALUES (null, '小明', '男', 24);
+    INSERT INTO tb_user2 VALUES (null, '小王', '男', 25);
+    INSERT INTO tb_user2 VALUES (null, '小丽', '女', 22);
+    INSERT INTO tb_user2 VALUES (null, '小花', '女', 25);
+
+运行SelectMapTest类的main方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: SELECT * FROM TB_USER 
+    DEBUG [main] ==> Parameters: 
+    DEBUG [main] <==      Total: 4
+    {sex=男, name=小丽, id=2, age=22}
+    {sex=男, name=小李, id=3, age=22}
+    {sex=女, name=小王, id=4, age=20}
+    {sex=女, name=小明, id=5, age=20}
+
+可以看到，查询语句返回的每一条数据都被封装成一个Map集合，列名作为Map集合的key，而列的值作为Map的value。
+
+虽然数据被封装成Map集合返回，但是Map集合并不能很好地描述一个领域模型。在实际项目开发中更加建议使用
+JavaBean 或 POJO（Plain Old Java Object，普通 Java 对象）作为领域模型描述数据。例如：
+
+.. code:: xml
+
+    <select id="selectUser" resultType="org.fkit.domain.User">
+        select * from tb_user
+    </select>
+
+默认情况下，MyBatis会将查询到的数据的列和需要返回的对象（User）的属性逐一进行匹配赋值，
+但是如果查询到的数据的列和需要返回的对象（User）的属性不一致，则MyBatis就不会自动赋值了，
+这时，可以使用resultMap进行处理。
+
+进入mybatis数据库，创建一个表TB_USER2，并插入几条测试数据。
+
+.. code:: sql
+
+    use mybatis;
+    DROP TABLE IF EXISTS `tb_user2`;
+    CREATE TABLE `tb_user2` (
+    `user_id` int(11) NOT NULL AUTO_INCREMENT,
+    `user_name` varchar(18) NOT NULL,
+    `user_sex` varchar(18) NOT NULL,
+    `user_age` int(11) NOT NULL,
+    PRIMARY KEY (`user_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+    INSERT INTO tb_user2 VALUES (null, '小明', '男', 24);
+    INSERT INTO tb_user2 VALUES (null, '小王', '男', 25);
+    INSERT INTO tb_user2 VALUES (null, '小丽', '女', 22);
+    INSERT INTO tb_user2 VALUES (null, '小花', '女', 25);
+
+接下来创建一个User对象映射TB_USER2表。
+
+程序清单：codes/09/ResultMapTest/src/org/fkit/domain/User.java
+
+.. code:: java
+
+    public class User implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Integer id;
+        private String name;
+        private String sex;
+        private Integer age;
+        public User() {
+            super();
+            // TODO Auto-generated constructor stub
+        }
+        public User(String name, String sex, Integer age) {
+            super();
+            this.name = name;
+            this.sex = sex;
+            this.age = age;
+        }
+        // 此处省略getter和setter方法,请自己补上
+        
+        public String toString() {
+            return "User [id=" + id + ", name=" + name + ", sex=" + sex + ", age=" + age + "]";
+        }
+    }
+
+程序清单：
+codes/09/ResultMapTest/src/org/fkit/mapper/UserMapper.xml
+
+.. code:: xml
+
+    <resultMap id="userResultMap" type="org.fkit.domain.User">
+        <id property="id" column="user_id"/>
+        <result property="name" column="user_name"/>
+        <result property="sex" column="user_sex"/>
+        <result property="age" column="user_age"/>
+    </resultMap>
+    <!-- 使用自定义的映射 -->
+    <select
+        id="selectUser2"
+        resultMap="userResultMap"> SELECT * FROM TB_USER2
+    </select>
+
+上面使用了一个新的元素 ``＜resultMap.../＞``，该元素常用属性如下：
+
+* id。 resultMap的唯一标识符。
+* type。 resultMap实际返回的类型。
+
+上面使用了 ``＜resultMap.../＞`` 的两个子元素id和result。
+
+id。 表示数据库表的主键，其中，column 属性表示数据库表的列名，property 表示数据库列映射到返回类型的属性。
+
+result。 表示数据库表的普通列，其中，column属性表示数据库表的列名，property表示数据库列映射到返回类型的属性。
+
+程序清单：
+codes/09/ResultMapTest/src/org/fkit/test/ResultMapTest.java
+
+.. code:: java
+
+    public class ResultMapTest {
+        public static void main(String[] args) {
+            // 定义SqlSession变量
+            SqlSession sqlSession = null;
+            try {
+                // 1.创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                // 
+                List<User> user_list = sqlSession.selectList("org.fkit.mapper.UserMapper.selectUser2");
+                // 遍历List集合，打印每一个Map对象
+                user_list.forEach(user -> System.out.println(user));
+                // 提交事务
+                sqlSession.commit();
+            } catch (Exception e) {
+                // 回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            } finally {
+                // 关闭SqlSession
+                if (sqlSession != null)
+                    sqlSession.close();
+            }
+        }
+    }
+
+运行ResultMapTest类的main方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: SELECT * FROM TB_USER2 
+    DEBUG [main] ==> Parameters: 
+    DEBUG [main] <==      Total: 4
+    User [id=1, name=小明, sex=男, age=24]
+    User [id=2, name=小王, sex=男, age=25]
+    User [id=3, name=小丽, sex=女, age=22]
+    User [id=4, name=小花, sex=女, age=25]
+
+可以看到，TB_USER2的列名虽然和User对象的属性名不一致，数据依然被正确封装到User对象当中。
+
+在实际项目开发中，还有更加复杂的情况，例如执行的是一个多表查询语句，而返回的对象关联到另一个对象，
+此时简单地映射已经无法解决问题，必须使用 ``＜resultMap.../＞`` 元素来完成关联映射。
+
+进入mybatis数据库，创建两个表TB_CLAZZ和TB_STUDENT，并分别插入几条测试数据。
+
+.. code:: sql
+
+    CREATE TABLE TB_CLAZZ (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        CODE VARCHAR(18)
+    );
+    INSERT INTO TB_CLAZZ(CODE) VALUES('j1601');
+    INSERT INTO TB_CLAZZ(CODE) VALUES('j1602');
+
+    CREATE TABLE TB_STUDENT (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        NAME VARCHAR(18),
+        sex VARCHAR(18),
+        age INT,
+        clazz_id INT,
+        FOREIGN KEY (clazz_id) REFERENCES tb_clazz(id)
+    );
+    INSERT INTO TB_STUDENT (NAME,sex,age,clazz_id) VALUES ('jack','男',22,1);
+    INSERT INTO TB_STUDENT (NAME,sex,age,clazz_id) VALUES ('rose','女',18,1);
+    INSERT INTO TB_STUDENT (NAME,sex,age,clazz_id) VALUES ('tom','男',25,2);
+    INSERT INTO TB_STUDENT (NAME,sex,age,clazz_id) VALUES ('mary','女',20,2);
+
+
+以上SQL语句插入了两个班级记录和4个学生记录，两个学生分配在1班，两个学生分配在2班。需要指出的是，
+TB_STUDENT表中的clazz_id 列作为外键引用TB_CLAZZ 表的id列，表示学生对应的班级。
+
+接下来我们要做的是查询出所有的学生信息，同时关联查询出学生对应的班级信息。
+
+创建一个Clazz对象和Student对象并分别映射TB_CLAZZ表和 TB_STUDENT表。
+
+程序清单：codes/09/ResultMapTest/src/org/fkit/domain/Clazz.java
+
+.. code:: java
+
+    public class Clazz implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Integer id;
+        private String code;
+        private List<Student> students;
+        public Clazz() {
+            super();
+            // TODO Auto-generated constructor stub
+        }
+        // 此处省略getter和setter方法,请自己补上
+        public List<Student> getStudents() {
+            return students;
+        }
+        public void setStudents(List<Student> students) {
+            this.students = students;
+        }
+        
+        public String toString(){
+            return "Clazz [id=" + id + ", code=" + code + "]";
+        }
+    }
+
+程序清单：
+codes/09/ResultMapTest/src/org/fkit/domain/Student.java
+
+.. code:: java
+
+    public class Student implements Serializable{
+        private static final long serialVersionUID = 1L;
+        private Integer id;
+        private String name;
+        private String sex;
+        private Integer age;
+        // 关联的Clazz对象
+        private Clazz clazz;
+        public Student() {
+            super();
+            // TODO Auto-generated constructor stub
+        }
+        // 此处省略getter和setter方法,请自己补上
+        
+        public String toString() {
+            return "Student [id=" + id + ", name=" + name + ", sex=" + sex + ", age=" + age + ", clazz="
+                    + clazz + "]";
+        }
+    }
+
+需要注意的是，Student中的属性Clazz是一个对象，该对象包括Clazz的id和code。
+这是现代开发中最常用的对象关联方式。
+
+程序清单：
+codes/09/ResultMapTest/src/org/fkit/mapper/StudentMapper.xml
+
+.. code:: xml
+
+    <select id="selectStudent" resultMap="studentResultMap">
+        SELECT * FROM TB_STUDENT
+    </select>
+    <!-- 映射学生对象的resultMap -->
+    <resultMap
+        id="studentResultMap"
+        type="org.fkit.domain.Student">
+        <id property="id" column="id"/>
+        <result property="name" column="name"/>
+        <result property="sex" column="sex"/>
+        <result property="age" column="age"/>
+        <!-- 关联映射 -->
+        <association property="clazz" column="clazz_id"
+            javaType="org.fkit.domain.Clazz"
+            select="selectClazzWithId"/>
+    </resultMap>
+    <!-- 根据班级id查询班级 -->
+    <select id="selectClazzWithId" resultType="org.fkit.domain.Clazz">
+        SELECT * FROM TB_CLAZZ where id = #{id}
+    </select>
+
+上面的映射相对之前复杂了一些，具体解释如下：
+
+1. 首先执行id为selectStudent的 ``＜select.../＞`` 元素，查询所有的学生数据，此时返回的不是简单的Student对象，
+   因为Student对象中还包含了Clazz对象，所以使用resultMap去映射返回类型。
+2. id为studentResultMap的 ``＜resultMap.../＞`` 元素返回类型为 ``org.fkit.domain.Student``，其中，
+   id、name、sex 和 age 都是简单的属性映射，而查询的班级 id 列 clazz_id 则使用了关联映射 ``＜association.../＞``。
+
+``＜association.../＞`` 元素的解释如下：
+
+* column。 表示数据库表的列名。
+* property。 表示返回类型Student的属性名clazz。
+* javaType。 表示该属性对应的类型名称，本示例是一个Clazz类型。
+* select。 表示执行一条查询语句，将查询到的数据封装到property所代表的类型对象当中。
+  上面的selectClazzWithId执行一条SQL语句，将学生的clazz_id作为参数查询对应的班级信息。
+
+程序清单：
+codes/09/ResultMapTest/src/org/fkit/test/SelectStudentTest.java
+
+.. code:: java
+
+    package org.fkit.test;
+
+    import java.util.List;
+    import org.apache.ibatis.session.SqlSession;
+    import org.fkit.domain.Student;
+    import org.fkit.factory.FKSqlSessionFactory;
+
+    public class SelectStudentTest {
+
+        public static void main(String[] args)  {
+            // 定义SqlSession变量
+            SqlSession sqlSession = null;
+            try {
+                // 创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                // 查询TB_USER表所有数据返回List集合,集合中的每个元素都是一个Student对象
+                List<Student> student_list 
+                    = sqlSession.selectList("org.fkit.mapper.UserMapper.selectStudent");
+                // 遍历List集合，打印每一个Student对象，该对象包含关联的Clazz对象
+                student_list.forEach(stu -> System.out.println(stu));
+                // 提交事务
+                sqlSession.commit();
+            } catch (Exception e) {
+                // 回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            }finally {
+                // 关闭SqlSession
+                if(sqlSession != null) 
+                    sqlSession.close();
+            }
+        }
+    }
+
+运行SelectStudentTest类的main方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: SELECT * FROM TB_STUDENT 
+    DEBUG [main] ==> Parameters: 
+    DEBUG [main] ====>  Preparing: SELECT * FROM TB_CLAZZ where id = ? 
+    DEBUG [main] ====> Parameters: 1(Integer)
+    DEBUG [main] <====      Total: 1
+    DEBUG [main] ====>  Preparing: SELECT * FROM TB_CLAZZ where id = ? 
+    DEBUG [main] ====> Parameters: 2(Integer)
+    DEBUG [main] <====      Total: 1
+    DEBUG [main] <==      Total: 4
+    Student [id=1, name=小明, sex=男, age=22, clazz=Clazz [id=1, code=B180102]]
+    Student [id=2, name=小王, sex=男, age=22, clazz=Clazz [id=2, code=B180203]]
+    Student [id=3, name=小丽, sex=男, age=21, clazz=Clazz [id=2, code=B180203]]
+    Student [id=4, name=小芳, sex=男, age=23, clazz=Clazz [id=1, code=B180102]]
+
+可以看到，因为使用了关联映射，查询学生信息时学生对应的班级对象也被查询出来了。
+
+现在查询所有学生时可以关联查询出班级信息了，那如果反过来，查询所有班级时需要查询出班级中的所有学生对象，
+应该如何映射呢？
+
+学生通常只对应一个班级，但是班级中会有多个学生存在，所以首先在Clazz.java类中增加一个字段students，
+该字段是一个List集合，表示班级的多个学生。
+
+程序清单：codes/09/ResultMapTest/src/org/fkit/domain/Clazz.java
+
+.. code:: java
+
+    public class Clazz implements Serializable {
+        //......
+        private List<Student> students;
+        //......
+    }
+
+程序清单：
+codes/09/ResultMapTest/src/org/fkit/mapper/UserMapper.xml
+
+.. code:: xml
+
+    <!-- 查询所有班级信息 -->
+    <select id="selectClazz" resultMap="clazzResultMap">
+        SELECT * FROM TB_CLAZZ
+    </select>
+    <!-- 映射班级对象的resultMap -->
+    <resultMap id="clazzResultMap" type="org.fkit.domain.Clazz">
+        <id property="id" column="id"/>
+        <result property="code" column="code"/>
+        <!-- 班级的学生属性，因为一个班级有多个学生，所以该属性是一个集合 -->
+        <collection property="students" javaType="ArrayList"
+            column="id"
+            ofType="org.fkit.domain.Student"
+            select="selectStudentWithId"/>
+    </resultMap>
+    <!-- 根据班级id查询学生 -->
+    <select id="selectStudentWithId" resultType="org.fkit.domain.Student"> 
+        SELECT * FROM TB_STUDENT where clazz_id = #{id}
+    </select>
+
+上面的映射和查询学生关联班级类似，具体解释如下：
+
+首先执行id为selectClazz的 ``＜select.../＞`` 元素，查询所有的班级数据，此时返回的不是简单的Clazz对象，
+因为Clazz对象中还包含了学生的集合对象，所以使用resultMap去映射返回类型。
+
+id为clazzResultMap的 ``＜resultMap.../＞`` 元素返回类型为org.fkit.domain.Clazz，其中，id和code都是简单的属性映射，
+而查询班级所有学生时则使用了集合映射 ``＜collection.../＞``。
+
+``＜collection.../＞`` 元素的解释如下：
+
+* property。 表示返回类型Clazz的属性名students。
+* javaType。 表示该属性对应的类型名称，本示例中是一个ArrayList集合。
+* ofType。 表示集合当中的类型，本示例中是Student类型。
+* column。 表示使用id作为参数进行之后的select语句查询。
+* select。 表示执行一条查询语句，将查询到的数据封装到property所代表的类型对象当中。
+  上面的selectStudentWithId执行一条SQL语句，将班级的id作为参数查询班级对应的所有学生信息。
+
+程序清单：
+codes/09/ResultMapTest/src/org/fkit/test/SelectClazzTest.java
+
+.. code:: java
+
+    package org.fkit.test;
+
+    import java.util.List;
+    import org.apache.ibatis.session.SqlSession;
+    import org.fkit.domain.Clazz;
+    import org.fkit.domain.Student;
+    import org.fkit.factory.FKSqlSessionFactory;
+
+    public class SelectClazzTest {
+
+        public static void main(String[] args)  {
+            // 定义SqlSession变量
+            SqlSession sqlSession = null;
+            try {
+                // 创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                // 查询TB_CLAZZ表所有数据返回List集合,集合中的每个元素都是一个Clazz对象
+                List<Clazz> clazz_list 
+                    = sqlSession.selectList("org.fkit.mapper.UserMapper.selectClazz");
+                // 遍历List集合，打印每一个Clazz对象和该Clazz关联的所有Student对象
+                for(Clazz clazz : clazz_list){
+                    System.out.println(clazz);
+                    List<Student> student_list = clazz.getStudents();
+                    for(Student stu : student_list){
+                        System.out.println(stu.getId() + " " + stu.getName() + " " + stu.getSex() + " " + stu.getAge());
+                    }
+                }
+                // 提交事务
+                sqlSession.commit();
+            } catch (Exception e) {
+                // 回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            }finally {
+                // 关闭SqlSession
+                if(sqlSession != null) 
+                    sqlSession.close();
+            }
+        }
+    }
+
+运行SelectClazzTest类的main方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: SELECT * FROM TB_CLAZZ 
+    DEBUG [main] ==> Parameters: 
+    DEBUG [main] ====>  Preparing: SELECT * FROM TB_STUDENT where clazz_id = ? 
+    DEBUG [main] ====> Parameters: 1(Integer)
+    DEBUG [main] <====      Total: 2
+    DEBUG [main] ====>  Preparing: SELECT * FROM TB_STUDENT where clazz_id = ? 
+    DEBUG [main] ====> Parameters: 2(Integer)
+    DEBUG [main] <====      Total: 2
+    DEBUG [main] <==      Total: 2
+    Clazz [id=1, code=B180102]
+    1 小明 男 22
+    4 小芳 男 23
+    Clazz [id=2, code=B180203]
+    2 小王 男 22
+    3 小丽 男 21
+
+可以看到，因为使用了集合映射，所以查询班级信息时班级对应的所有学生对象也被查询出来了。
+
+9.5 本章小结
+----------------
+
+本章首先介绍了MyBatis最重要的两个类SqlSessionFactory和 SqlSession；接下来详细介绍了
+MyBatis的根配置文件mybatis-config.xml 中的元素及使用方法，包括MyBatis的日志信息配置；
+最后重点介绍了 Mapper XML映射文件的元素使用方法，包括insert、delete、update、select及强大的ResultMaps。
+
+第10章将深入MyBatis内部，重点介绍MyBatis的一对一、一对多、多对多、动态SQL、调用存储过程和缓存机制。
