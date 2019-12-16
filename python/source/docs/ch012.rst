@@ -1,0 +1,781 @@
+第12章 Spring 5整合MyBatis 3
+==================================
+
+**本章要点**
+
+* Spring 5整合MyBatis 3配置
+* Spring 5整合MyBatis 3的优势
+
+前面章节详细介绍了Spring MVC的常用功能和MyBatis的基本用法。在实际的项目开发中，
+我们需要将Spring和MyBatis进行整合，从而使用Spring依赖注入以减少代码的耦合，使用Spring MVC
+处理请求并作出响应，使用MyBatis更加简捷地完成数据库操作。本章将重点介绍Spring和MyBatis的整合过程。
+
+12.1 开发环境搭建
+-------------------
+
+* 安装JDK 8，配置环境变量JAVA_HOME、PATH和CLASSPATH。
+* 安装Eclipse并配置JRE环境。
+* 安装Tomcat 8，并在Eclipse中集成Tomcat 8。
+* 安装MySQL 5以上数据库。
+
+.. note::
+
+    关于开发环境的内容请参考《疯狂Java讲义》。
+
+12.2 准备所需的jar包
+---------------------
+
+**Spring** 框架jar包。 spring-framework-5.0.1.RELEASE文件夹下libs目录下所有模块class文件的jar包
+和Spring的核心容器必须依赖的common logging的jar包（本书示例是commons-logging-1.2.jar），共22个。
+
+**MyBatis** 框架jar包。 mybatis-3.4.5.jar和mybatis-3.4.5文件夹下的lib 目录下所有jar包，共13个。
+
+**MyBatis** 整合 **Spring** 中间件jar包。 根据MyBatis官方的说法，在MyBatis 3问世之前，
+Spring 3的开发工作就已经完成了，所以Spring 3中 没有提供对MyBatis 3的支持。因此由
+MyBatis社区自己开发了一个 MyBatis-Spring中间件用来满足MyBatis用户整合Spring的需求，
+该中间件有如下两个作用：
+
+* 在Spring中配置MyBatis工厂类。
+* 在DAO层使用Spring注入的工具Bean对数据进行操作。
+
+本书成书时该中间件最高版本是mybatis-spring-1.3.1.jar。
+
+aspectj 框架 jar 包。 aspectjrt.jar、aspectjtools.jar、aspectjweaver.jar 和 org.aspectj.matcher.jar。本书成书时aspectj框架最高版本是aspectj-1.8.13。
+
+数据库驱动jar包。 本书成书时最高版本是mysql-connector-java-5.1.44.jar。
+
+数据源 C3P0 所需 jar 包。 本书成书时最高版本是c3p0-0.9.5.2.jar、hibernate-c3p0-5.2.10.Final.jar和mchange-commons-java-0.2.11.jar。
+
+JSTL标签库jar包。 javax.servlet.jsp.jstl-1.2.1.jar和javax.servlet.jsp.jstl-api-1.2.1.jar。
+
+12.3 准备数据库资源
+---------------------
+
+在mybatis数据库中创建两个表tb_user和tb_book，并插入测试数据，SQL脚本如下：
+
+.. code:: sql
+
+    CREATE TABLE tb_user(
+        id INT PRIMARY KEY AUTO_INCREMENT,      #id
+        loginname VARCHAR(50) UNIQUE,		#登录名 邮箱
+        PASSWORD VARCHAR(18),			#密码
+        username VARCHAR(18),			#用户名
+        phone VARCHAR(18),			#电话
+        address VARCHAR(255)			#地址
+    );
+
+    CREATE TABLE tb_book (
+        id INT (11) PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR (54),
+        author VARCHAR (54),
+        publicationdate DATE ,
+        publication VARCHAR (150),
+        price DOUBLE ,
+        image VARCHAR (54),
+        remark VARCHAR (600)
+    );
+
+12.4 完成配置文件
+---------------------
+
+新建一个项目fkbookapp，加入在12.2节中准备的jar包。
+
+程序清单：codes/12/fkbookapp/src/db.properties
+
+.. code:: java
+
+    dataSource.driverClass=com.mysql.jdbc.Driver
+    dataSource.jdbcUrl=jdbc:mysql://127.0.0.1:3306/mybatis
+    dataSource.user=root
+    dataSource.password=root
+    dataSource.maxPoolSize=20
+    dataSource.maxIdleTime = 1000
+    dataSource.minPoolSize=6
+    dataSource.initialPoolSize=5
+
+程序清单：codes/12/fkbookapp/WebContent/WEB-INF/applicationContext.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <beans xmlns="http://www.springframework.org/schema/beans" 
+        xmlns:mybatis="http://mybatis.org/schema/mybatis-spring"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:p="http://www.springframework.org/schema/p"
+        xmlns:context="http://www.springframework.org/schema/context"
+        xmlns:mvc="http://www.springframework.org/schema/mvc"
+        xmlns:tx="http://www.springframework.org/schema/tx"
+        xsi:schemaLocation="http://www.springframework.org/schema/beans 
+                            http://www.springframework.org/schema/beans/spring-beans.xsd
+                            http://www.springframework.org/schema/context
+                            http://www.springframework.org/schema/context/spring-context.xsd
+                            http://www.springframework.org/schema/mvc
+                            http://www.springframework.org/schema/mvc/spring-mvc.xsd
+                            http://www.springframework.org/schema/tx
+                            http://www.springframework.org/schema/tx/spring-tx.xsd
+                            http://mybatis.org/schema/mybatis-spring 
+                            http://mybatis.org/schema/mybatis-spring.xsd ">
+                    
+        <!-- mybatis:scan会将org.fkit.mapper包里的所有接口当作mapper配置，之后可以自动引入mapper类-->  
+        <mybatis:scan base-package="org.fkit.mapper"/>   
+        
+        <!-- 扫描org.fkit包下面的java文件，有Spring的相关注解的类，则把这些类注册为Spring的bean -->
+        <context:component-scan base-package="org.fkit"/>
+        
+        <!-- 使用PropertyOverrideConfigurer后处理器加载数据源参数 -->
+        <context:property-override location="classpath:db.properties"/>
+
+        <!-- 配置c3p0数据源 -->
+        <bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource"/>
+        
+        <!-- 配置SqlSessionFactory，org.mybatis.spring.SqlSessionFactoryBean是Mybatis社区开发用于整合Spring的bean -->
+        <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean"
+            p:dataSource-ref="dataSource"/>
+        
+        <!-- JDBC事务管理器 -->
+        <bean id="transactionManager" 
+        class="org.springframework.jdbc.datasource.DataSourceTransactionManager"
+            p:dataSource-ref="dataSource"/>
+        
+        <!-- 启用支持annotation注解方式事务管理 -->
+        <tx:annotation-driven transaction-manager="transactionManager"/>
+    </beans>
+
+程序清单：codes/12/fkbookapp/WebContent/WEB-INF/springmvc-config.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <beans xmlns="http://www.springframework.org/schema/beans"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:mvc="http://www.springframework.org/schema/mvc"
+        xmlns:p="http://www.springframework.org/schema/p"
+        xmlns:context="http://www.springframework.org/schema/context"
+        xsi:schemaLocation="
+            http://www.springframework.org/schema/beans
+            http://www.springframework.org/schema/beans/spring-beans.xsd
+            http://www.springframework.org/schema/mvc
+            http://www.springframework.org/schema/mvc/spring-mvc.xsd     
+            http://www.springframework.org/schema/context
+            http://www.springframework.org/schema/context/spring-context.xsd">
+            
+        <!-- 自动扫描该包，SpringMVC会将包下用了@controller注解的类注册为Spring的controller -->
+        <context:component-scan base-package="org.fkit.controller"/>
+        <!-- 设置默认配置方案 -->
+        <mvc:annotation-driven/>
+        <!-- 使用默认的Servlet来响应静态文件 -->
+        <mvc:default-servlet-handler/>
+        <!-- 视图解析器  p:prefix属性表示前缀  p:suffix 表示后缀  -->
+        <bean id="viewResolver"
+            class="org.springframework.web.servlet.view.InternalResourceViewResolver"
+            p:prefix="/WEB-INF/content/" p:suffix=".jsp"/> 
+        
+    </beans>
+
+程序清单：codes/12/fkbookapp/WebContent/WEB-INF/web.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <web-app xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+        xmlns="http://xmlns.jcp.org/xml/ns/javaee" 
+        xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee 
+        http://xmlns.jcp.org/xml/ns/javaee/web-app_3_1.xsd" 
+        id="WebApp_ID" version="3.1">
+        
+        <!-- 配置spring核心监听器，默认会以 /WEB-INF/applicationContext.xml作为配置文件 -->
+        <listener>
+            <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+        </listener>
+        <!-- contextConfigLocation参数用来指定Spring的配置文件 -->
+        <context-param>
+            <param-name>contextConfigLocation</param-name>
+            <param-value>/WEB-INF/applicationContext*.xml</param-value>
+        </context-param>
+        
+        <!-- 定义Spring MVC的前端控制器 -->
+        <servlet>
+            <servlet-name>springmvc</servlet-name>
+            <servlet-class>
+                org.springframework.web.servlet.DispatcherServlet
+            </servlet-class>
+            <init-param>
+                <param-name>contextConfigLocation</param-name>
+                <param-value>/WEB-INF/springmvc-config.xml</param-value>
+            </init-param>
+            <load-on-startup>1</load-on-startup>
+        </servlet>
+        
+        <!-- 让Spring MVC的前端控制器拦截所有请求 -->
+        <servlet-mapping>
+            <servlet-name>springmvc</servlet-name>
+            <url-pattern>/</url-pattern>
+        </servlet-mapping>
+        
+        <!-- 编码过滤器 -->
+        <filter>
+            <filter-name>characterEncodingFilter</filter-name>
+            <filter-class>org.springframework.web.filter.CharacterEncodingFilter</filter-class>
+            <init-param>
+                <param-name>encoding</param-name>
+                <param-value>UTF-8</param-value>
+            </init-param>
+        </filter>
+        <filter-mapping>
+            <filter-name>characterEncodingFilter</filter-name>
+            <url-pattern>/*</url-pattern>
+        </filter-mapping>
+        
+    </web-app>
+
+12.5 持久层功能实现
+---------------------
+
+程序清单：codes/12/fkbookapp/src/org/fkit/domain/User.java
+
+.. code:: java
+
+    package org.fkit.domain;
+    import java.io.Serializable;
+    public class User implements Serializable{
+        private static final long serialVersionUID = 1L;
+        
+        private Integer id;			// id
+        private String loginname;	// 登录名
+        private String password;	// 密码
+        private String username;	// 用户名
+        private String phone;		// 电话
+        private String address;		// 地址
+        
+        public User() {
+            super();
+            // TODO Auto-generated constructor stub
+        }
+        public Integer getId() {
+            return id;
+        }
+        public void setId(Integer id) {
+            this.id = id;
+        }
+        public String getLoginname() {
+            return loginname;
+        }
+        public void setLoginname(String loginname) {
+            this.loginname = loginname;
+        }
+        public String getPassword() {
+            return password;
+        }
+        public void setPassword(String password) {
+            this.password = password;
+        }
+        public String getUsername() {
+            return username;
+        }
+        public void setUsername(String username) {
+            this.username = username;
+        }
+        public String getPhone() {
+            return phone;
+        }
+        public void setPhone(String phone) {
+            this.phone = phone;
+        }
+        public String getAddress() {
+            return address;
+        }
+        public void setAddress(String address) {
+            this.address = address;
+        }
+        @Override
+        public String toString() {
+            return "User [id=" + id + ", loginname=" + loginname + ", password="
+                    + password + ", username=" + username + ", phone=" + phone
+                    + ", address=" + address + "]";
+        }
+    }
+
+程序清单：codes/12/fkbookapp/src/org/fkit/domain/Book.java
+
+.. code:: java
+
+    package org.fkit.domain;
+
+    import java.io.Serializable;
+    import java.util.Date;
+
+    public class Book implements Serializable{
+        
+        private static final long serialVersionUID = 1L;
+        
+        private Integer id;				// id	
+        private String name;			// 书名
+        private String author;			// 作者
+        private String publication;		// 出版社
+        private Date publicationdate;	// 出版日期
+        private Double price;			// 价格
+        private String image;			// 封面图片
+        private String remark;			// 详细描述
+        
+        public Book() {
+            super();
+            // TODO Auto-generated constructor stub
+        }
+        public Integer getId() {
+            return id;
+        }
+        public void setId(Integer id) {
+            this.id = id;
+        }
+        public String getName() {
+            return name;
+        }
+        public void setName(String name) {
+            this.name = name;
+        }
+        public String getAuthor() {
+            return author;
+        }
+        public void setAuthor(String author) {
+            this.author = author;
+        }
+        public String getPublication() {
+            return publication;
+        }
+        public void setPublication(String publication) {
+            this.publication = publication;
+        }
+        public Date getPublicationdate() {
+            return publicationdate;
+        }
+        public void setPublicationdate(Date publicationdate) {
+            this.publicationdate = publicationdate;
+        }
+        public Double getPrice() {
+            return price;
+        }
+        public void setPrice(Double price) {
+            this.price = price;
+        }
+        public String getImage() {
+            return image;
+        }
+        public void setImage(String image) {
+            this.image = image;
+        }
+        public String getRemark() {
+            return remark;
+        }
+        public void setRemark(String remark) {
+            this.remark = remark;
+        }
+        @Override
+        public String toString() {
+            return "Book [id=" + id + ", name=" + name + ", author=" + author
+                    + ", publication=" + publication + ", publicationdate="
+                    + publicationdate + ", price=" + price + ", image=" + image
+                    + ", remark=" + remark + "]";
+        }
+    }
+
+程序清单：codes/12/fkbookapp/src/org/fkit/mapper/UserMapper.java
+
+.. code:: java
+
+    package org.fkit.mapper;
+
+    import org.apache.ibatis.annotations.Param;
+    import org.apache.ibatis.annotations.Select;
+    import org.fkit.domain.User;
+    public interface UserMapper {
+        
+        /**
+        * 根据登录名和密码查询用户
+        * @param String loginname
+        * @param String password
+        * @return 找到返回User对象，没有找到返回null
+        * */
+        @Select("select * from tb_user where loginname = #{loginname} and password = #{password}")
+        User findWithLoginnameAndPassword(@Param("loginname")String loginname,
+                @Param("password") String password);
+    }
+
+程序清单：codes/12/fkbookapp/src/org/fkit/mapper/BookMapper.java
+
+.. code:: java
+
+    package org.fkit.mapper;
+
+    import java.util.List;
+    import org.apache.ibatis.annotations.Select;
+    import org.fkit.domain.Book;
+
+    public interface BookMapper {
+
+        /**
+        * 查询所有图书
+        * @return 图书对象集合
+        * */
+        @Select(" select * from tb_book ")
+        List<Book> findAll();
+    }
+
+持久层包括和数据库表映射的User.java和Book.java两个JavaBean对象，并使用了MyBatis的注解映射了对应的SQL语句。
+
+12.6 服务层功能实现
+---------------------
+
+程序清单：
+codes/12/fkbookapp/src/org/fkit/service/UserService.java
+
+.. code:: java
+
+    package org.fkit.service;
+
+    import org.fkit.domain.User;
+    public interface UserService {
+        
+        /**
+        * 判断用户登录
+        * @param String loginname
+        * @param String password
+        * @return 找到返回User对象，没有找到返回null
+        * */
+        User login(String loginname,String password);
+    }
+
+程序清单：
+codes/13/fkbookapp/src/org/fkit.service/impl/UserServiceImpl.java
+
+.. code:: java
+
+    package org.fkit.service.impl;
+
+    import org.fkit.domain.User;
+    import org.fkit.mapper.UserMapper;
+    import org.fkit.service.UserService;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.stereotype.Service;
+    import org.springframework.transaction.annotation.Isolation;
+    import org.springframework.transaction.annotation.Propagation;
+    import org.springframework.transaction.annotation.Transactional;
+
+    @Transactional(propagation=Propagation.REQUIRED,isolation=Isolation.DEFAULT)
+    @Service("userService")
+    public class UserServiceImpl implements UserService {
+        
+        /**
+        * 自动注入UserMapper
+        * */
+        @Autowired
+        private UserMapper userMapper;
+
+        /**
+        * UserService接口login方法实现
+        * @see { UserService }
+        * */
+        @Transactional(readOnly=true)
+        @Override
+        public User login(String loginname, String password) {
+            return userMapper.findWithLoginnameAndPassword(loginname, password);
+        }
+    }
+
+程序清单：
+codes/13/fkbookapp/src/org/fkit/service/BookService.java
+
+.. code:: java
+
+    package org.fkit.service;
+
+    import java.util.List;
+    import org.fkit.domain.Book;
+    public interface BookService {
+        
+        /**
+        * 查找所有图书
+        * @return Book对象集合
+        * */
+        List<Book> getAll();
+
+    }
+
+程序清单：
+codes/13/fkbookapp/src/org/fkit/service/impl/BookServiceImpl.java
+
+.. code:: java
+
+    package org.fkit.service.impl;
+    import java.util.List;
+    import org.fkit.domain.Book;
+    import org.fkit.mapper.BookMapper;
+    import org.fkit.service.BookService;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.stereotype.Service;
+    import org.springframework.transaction.annotation.Isolation;
+    import org.springframework.transaction.annotation.Propagation;
+    import org.springframework.transaction.annotation.Transactional;
+
+    /**
+    * Book服务层接口实现类
+    * @Service("bookService")用于将当前类注释为一个Spring的bean，名为bookService
+    * */
+    @Transactional(propagation=Propagation.REQUIRED,isolation=Isolation.DEFAULT)
+    @Service("bookService")
+    public class BookServiceImpl implements BookService {
+        
+        /**
+        * 自动注入BookMapper
+        * */
+        @Autowired
+        private BookMapper bookMapper;
+
+        /**
+        * BookService接口getAll方法实现
+        * @see { BookService }
+        * */
+        @Transactional(readOnly=true)
+        @Override
+        public List<Book> getAll() {
+            
+            return bookMapper.findAll();
+        }
+    }
+
+服务层使用了 Spring 的@Autowired 注解自动注入持久层的 Mapper对象，并且使用了@Service注解将类注释成为Spring的Bean。
+
+12.7 控制层功能实现
+---------------------
+
+程序清单：
+codes/12/fkbookapp/src/org/fkit/controller/FormController.java
+
+.. code:: java
+
+    package org.fkit.controller;
+
+    import org.springframework.stereotype.Controller;
+    import org.springframework.web.bind.annotation.RequestMapping;
+    /**
+    * 页面跳转控制器
+    * */
+    @Controller
+    public class FormController{
+
+        @RequestMapping(value="/loginForm")
+        public String loginForm(){
+            // 跳转页面
+            return "loginForm";
+        }
+
+    }
+
+程序清单：
+codes/12/fkbookapp/src/org/fkit/controller/UserController.java
+
+.. code:: java
+
+    package org.fkit.controller;
+
+    import javax.servlet.http.HttpSession;
+    import org.fkit.domain.User;
+    import org.fkit.service.UserService;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.beans.factory.annotation.Qualifier;
+    import org.springframework.stereotype.Controller;
+    import org.springframework.web.bind.annotation.PostMapping;
+    import org.springframework.web.servlet.ModelAndView;
+    import org.springframework.web.servlet.view.RedirectView;
+
+    /**
+    * 处理用户请求控制器
+    * */
+    @Controller
+    public class UserController {
+        
+        /**
+        * 自动注入UserService
+        * */
+        @Autowired
+        @Qualifier("userService")
+        private UserService userService;
+
+        /**
+        * 处理/login请求
+        * */
+        @PostMapping(value="/login")
+        public ModelAndView login(
+                String loginname,String password,
+                ModelAndView mv,
+                HttpSession session){
+            // 根据登录名和密码查找用户，判断用户登录
+            User user = userService.login(loginname, password);
+            if(user != null){
+                // 登录成功，将user对象设置到HttpSession作用范围域
+                session.setAttribute("user", user);
+                // 转发到main请求
+                mv.setView(new RedirectView("/fkbookapp/main"));
+            }else{
+                // 登录失败，设置失败提示信息，并跳转到登录页面
+                mv.addObject("message", "登录名或密码错误，请重新输入!");
+                mv.setViewName("loginForm");
+            }
+            return mv;
+        }
+    }
+
+程序清单：
+codes/12/fkbookapp/src/org/fkit/controller/BookController.java
+
+.. code:: java
+
+    package org.fkit.controller;
+
+    import java.util.List;
+    import org.fkit.domain.Book;
+    import org.fkit.service.BookService;
+    import org.springframework.beans.factory.annotation.Autowired;
+    import org.springframework.beans.factory.annotation.Qualifier;
+    import org.springframework.stereotype.Controller;
+    import org.springframework.ui.Model;
+    import org.springframework.web.bind.annotation.RequestMapping;
+
+    /**
+    * 处理图书请求控制器
+    * */
+    @Controller
+    public class BookController {
+        
+        /**
+        * 自动注入BookService
+        * */
+        @Autowired
+        @Qualifier("bookService")
+        private BookService bookService;
+
+        /**
+        * 处理/main请求
+        * */
+        @RequestMapping(value="/main")
+        public String main(Model model){
+            // 获得所有图书集合
+            List<Book> book_list = bookService.getAll();
+            // 将图书集合添加到model当中
+            model.addAttribute("book_list", book_list);
+            // 跳转到main页面
+            return "main";
+        }
+    }
+
+
+控制层使用了Spring的@Autowired注解自动注入服务层的Service对象，@Qualifier注解用于指明需要注入的具体类型，
+并且使用@Controller 注解将类注释成为 Spring MVC 的Controller。
+
+12.8 JSP页面
+----------------
+
+程序清单：codes/12/fkbookapp/WebContent/WEB-INF/content/loginForm.jsp
+
+.. code:: java
+
+    <%@ page language="java" contentType="text/html; charset=UTF-8"
+        pageEncoding="UTF-8"%>
+    <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+    <html>
+    <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>登录页面</title>
+    </head>
+    <body>
+    <h3>登录页面</h3>
+    <form action="login" method="post">
+        <font color="red">${requestScope.message }</font>
+        <table>
+            <tr>
+                <td><label>登录名: </label></td>
+                <td><input type="text" id="loginname" name="loginname" ></td>
+            </tr>
+            <tr>
+                <td><label>密码: </label></td>
+                <td><input type="password" id="password" name="password" ></td>
+            </tr>
+            <tr>
+                <td><input type="submit" value="登录"></td>
+            </tr>
+        </table>
+    </form>
+    </body>
+    </html>
+
+程序清单：codes/12/fkbookapp/WebContent/WEB-INF/content/main.jsp
+
+.. code:: java
+
+    <%@ page language="java" contentType="text/html; charset=UTF-8"
+        pageEncoding="UTF-8"%>
+    <%@ taglib uri="http://java.sun.com/jsp/jstl/core" prefix="c" %>
+    <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+    <html>
+    <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>首页</title>
+    <style type="text/css">
+        table{border-collapse:collapse;border-spacing:0;border-left:1px solid #888;border-top:1px solid #888;background:#efefef;}
+        th,td{border-right:1px solid #888;border-bottom:1px solid #888;padding:5px 15px;}
+        th{font-weight:bold;background:#ccc;}
+    </style>
+    </head>
+    <body>
+    欢迎[${sessionScope.user.username }]访问
+    <br>
+    <table border="1">
+        <tr>
+            <th>封面</th><th>书名</th><th>作者</th><th>价格</th>
+        </tr>
+        <c:forEach items="${requestScope.book_list }" var="book">
+            <tr>
+                <td><img src="images/${book.image }" height="60"></td>
+                <td>${book.name }</td>
+                <td>${book.author }</td>
+                <td>${book.price }</td>
+            </tr>
+        </c:forEach>
+    </table>
+    </body>
+    </html>
+
+loginForm.jsp是一个登录页面，可以在此输入登录名和密码进行登录。登录完成后main.jsp显示从数据库tb_book表读取出的书籍信息。
+
+12.9 测试Spring 5整合MyBatis 3
+----------------------------------
+
+部署fkbookapp项目，在浏览器中输入如下URL来测试应用：
+
+``http://localhost:8080/fkbookapp/loginForm``
+
+会看到如图12.1所示的界面，表示Spring MVC访问成功。
+
+图12.1 登录页面
+
+.. figure:: /_static/images/1201.jpg
+   :alt: 
+
+输入登录名 ``jack``，密码 ``123456``，单击“登录”按钮，请求将会被提交到UserController类的login方法进行登录验证。
+验证成功，请求将会被转发到BookController的main方法，获取所有书籍信息，之后跳转到main.jsp页面，如图12.2所示。
+
+图12.2 书籍页面
+
+.. figure:: /_static/images/1202.jpg
+   :alt: 
+
+如果登录名和密码输入错误，会重新跳转到登录页面提示用户重新输入，如图12.3所示。
+
+图12.3 登录失败页面
+
+.. figure:: /_static/images/1203.jpg
+   :alt: 
+
+12.10 本章小结
+-----------------
+本章详细介绍了Spring 5整合MyBatis 3的过程，重点在于MyBatis的注解映射、Spring MVC的配置和注解映射、
+Spring整合MyBatis的配置。

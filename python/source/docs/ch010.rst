@@ -1,0 +1,2481 @@
+第10章 深入使用MyBatis
+=========================
+
+**本章要点**
+
+* 一对一映射
+* 一对多映射
+* 多对多映射
+* 动态SQL映射
+* 调用存储过程
+* 事务管理
+* 缓存机制
+
+通过 MyBatis 的支持，应用程序可以从底层的 ``JDBC`` 中抽离出来，以面向对象的方式进行数据库访问。
+但面向对象远不止这些内容，比如对象和对象之间的关联关系，这对于客观世界的建模是非常重要的。
+本章将深入介绍 MyBatis 的关联映射，也会详细介绍 MyBatis 的动态SQL查询。
+
+10.1 MyBatis关联映射
+--------------------------
+
+客观世界中的对象很少有孤立存在的，例如班级，往往与班级的学生存在关联关系，如果得到某个班级的实例，
+那么应该可以直接获取班级对应的全部学生。反过来，如果已经得到一个学生的实例，
+那么也应该可以访问该学生对应的班级。这种实例之间的互相访问就是关联关系。
+
+关联关系是面向对象分析、面向对象设计最重要的知识，MyBatis完全可以理解这种关联关系，如果映射得当，
+MyBatis的关联映射将可以大大简化持久层数据的访问。关联关系大致有如下分类。
+
+* 一对一
+* 一对多
+* 多对多
+
+10.1.1 一对一
+++++++++++++++++++++
+
+在实际项目开发中，经常存在一对一关系，比如一个人只能有一个身份证，一个身份证只能给一个人使用，
+这就是一对一的关系。一对一关系推荐使用唯一主外键关联，即两张表使用外键关联关系，由于是一对一关联，
+因此还需要给外键列增加 ``unique`` 唯一约束。下面我们就用一个示例来看看MyBatis怎么处理一对一关系。
+
+示例：OneToOneTest
+
+首先，给之前创建的mybatis数据库创建两个表 ``tb_card`` 和 ``tb_person`` ，并插入测试数据。SQL脚本如下：
+
+.. code:: sql 
+
+    # 创建tb_card表
+    DROP TABLE IF EXISTS `tb_card`;
+    CREATE TABLE `tb_card` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `code` varchar(18) NOT NULL,
+    PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    # 插入一条数据
+    INSERT INTO `tb_card` VALUES ('1', '43280119980091');
+    # 创建tb_person表
+    DROP TABLE IF EXISTS `tb_person`;
+    CREATE TABLE `tb_person` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `name` varchar(18) NOT NULL,
+    `sex` varchar(18) NOT NULL,
+    `age` int(11) DEFAULT NULL,
+    `card_id` int(11) DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `card_id` (`card_id`),
+    CONSTRAINT `tb_person_ibfk_1` FOREIGN KEY (`card_id`)
+        REFERENCES `tb_card` (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    # 插入一条数据
+    INSERT INTO `tb_person` VALUES ('1', '小明', '男', '22', '1');
+
+.. note::
+
+    ``tb_person`` 表的 ``card_id`` 作为外键参照 ``tb_card`` 表的主键 ``id``，因为是一对一关系，
+    即一个card只能让一个person使用，所以把card_id做成了唯一键约束。如此一来，
+    当一个person使用了一个card之后，其他的person就不能使用该card了。
+
+在mybatis数据库中执行SQL脚本，完成创建数据库和表的操作。
+
+接下来，创建一个Card对象和一个Person对象分别映射tb_card和tb_peson表。
+
+程序清单：codes/10/OneToOneTest/src/org/fkit/domain/Card.java
+
+.. code:: java 
+
+    public class Card implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Integer id;  // 主键id
+        private String code; // 身份证编号
+        public Card() {
+            super();
+            // TODO Auto-generated constructor stub
+        }
+        // 此处省略getter和setter方法,请自己补上
+        @Override
+        public String toString() {
+            return "Card [id=" + id + ", code=" + code + "]";
+        }
+    }
+
+程序清单：
+codes/10/OneToOneTest/src/org/fkit/domain/Person.java
+
+.. code:: java
+
+    public class Person implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Integer id;  // 主键id
+        private String name; // 姓名
+        private String sex;  // 性别
+        private Integer age; // 年龄
+        // 人和身份证是一对一的关系，即一个人只有一个身份证
+        private Card card; 
+        public Person() {
+            super();
+            // TODO Auto-generated constructor stub
+        }
+        // 此处省略getter和setter方法,请自己补上
+        @Override
+        public String toString() {
+            return "Person [id=" + id + ", name=" + name + ", sex=" + sex
+                    + ", age=" + age + "]";
+        }
+    }
+
+人和身份证号码之间是一对一的关系，即一个人只有一个身份证。
+在 Person 类中定义了一个card属性，该属性是一个Card类型，用来映射一对一的关联关系，表示这个人的身份证。
+再接下来是XML映射文件。
+
+程序清单：
+codes/10/OneToOneTest/src/org/fkit/mapper/CardMapper.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <!-- namespace指用户自定义的命名空间。 -->
+    <mapper namespace="org.fkit.mapper.CardMapper">
+        <!-- 根据id查询Card，返回Card对象 -->
+        <select
+            id="selectCardById"
+            parameterType="int"
+            resultType="org.fkit.domain.Card">
+            SELECT * from tb_card where id = #{id}
+        </select>
+    </mapper>
+
+程序清单：
+codes/10/OneToOneTest/src/org/fkit/mapper/PersonMapper.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <!-- namespace指用户自定义的命名空间。 -->
+    <mapper namespace="org.fkit.mapper.PersonMapper">
+        <!-- 根据id查询Person，返回resultMap -->
+        <select
+            id="selectPersonById"
+            parameterType="int"
+            resultMap="personMapper">
+            SELECT * from tb_person where id = #{id}
+        </select>
+        <!-- 映射Peson对象的resultMap -->
+        <resultMap
+            type="org.fkit.domain.Person"
+            id="personMapper">
+            <id
+                property="id"
+                column="id"/>
+            <result
+                property="name"
+                column="name"/>
+            <result
+                property="sex"
+                column="sex"/>
+            <result
+                property="age"
+                column="age"/>
+            <!-- 一对一关联映射:association -->
+            <association
+                property="card"
+                column="card_id"
+                select="org.fkit.mapper.CardMapper.selectCardById"
+                javaType="org.fkit.domain.Card"/>
+        </resultMap>
+    </mapper>
+
+在PersonMapper.xml中定义了一个 ``<select.../>``，其根据 ``id`` 查询 Peson 信息，
+由于 ``Peson`` 类除了简单的属性 id、name、sex 和 age 之外，还有一个关联对象 ``card``，
+所以返回的是一个名为 personMapper 的 ``resultMap``。
+personMapper中使用了 ``<association.../>`` 元素映射一对一的关联关系，
+select 属性表示会使用 column 属性的 ``card_id`` 值作为参数执行 ``CardMapper`` 中定义的 ``selectCardById``
+查询对应的Card数据，查询出的数据将被封装到property表示的Card对象当中。
+
+之前的测试都是使用 ``SqlSession`` 对象调用 ``insert``、``update``、``delete`` 和 ``select`` 方法进行测试。实际上，
+Mybatis 官方手册建议通过 ``mapper`` 接口的代理对象访问 Mybatis，该对象关联了 ``SqlSession`` 对象，
+开发者可以通过该对象直接调用方法操作数据库。下面定义一个 mapper 接口对象，需要注意的是，
+mapper 接口对象的类名必须和之前的 XML 文件中的 mapper 的 ``namespace`` 一致，
+而方法名和参数也必须和 XML 文件中的 ``<select.../>`` 元素的 ``id`` 属性和 ``parameterType`` 属性一致。
+
+程序清单：
+codes/10/OneToOneTest/src/org/fkit/mapper/PersonMapper.java
+
+.. code:: java
+
+    public interface PersonMapper {
+        /**
+        * 方法名称要和select元素的id属性一致,
+        * 参数名必须和select元素的parameterType属性一致.
+        * @param  id
+        * @return    Person对象
+        */
+        Person selectPersonById(Integer id);
+    }
+
+最后，完成测试类。
+
+程序清单：
+codes/10/OneToOneTest/src/org/fkit/test/OneToOneTest.java
+
+.. code:: java
+
+    public class OneToOneTest {
+        public static void main(String[] args)
+        {
+            // 定义SqlSession变量
+            SqlSession sqlSession = null;
+            try
+            {
+                // 1.创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                // 2.获得mapper接口的代理对象
+                PersonMapper pm
+                    =sqlSession.getMapper(PersonMapper.class);
+                // 3.直接调用接口的方法，查询id为1的Peson数据
+                Person p = pm.selectPersonById(1);
+                // 4.1打印Peson对象
+                System.out.println(p);
+                // 4.2打印Person对象关联的Card对象
+                System.out.println(p.getCard());
+                // 5.提交事务
+                sqlSession.commit();
+            } catch (Exception e)
+            {
+                // 6.回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            } finally
+            {
+                // 7.关闭SqlSession
+                if (sqlSession != null)
+                    sqlSession.close();
+            }
+        }
+    }
+
+项目的mybatis-config.xml和log4j.xml文件内容请参考配套资源文件，此处不再赘述。
+
+运行 ``OneToOneTest`` 类的 ``main`` 方法，通过 ``SqlSession`` 的 ``getMapper（Class<T> type）`` 方法获得 
+``mapper`` 接口的代理对象 ``PersonMapper``，调用 ``selectPersonById`` 方法时会执行 ``PersonMapper.xml`` 中
+``<select.../>`` 元素中定义的SQL语句。控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: SELECT * from tb_person where id = ? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] ====>  Preparing: SELECT * from tb_card where id = ? 
+    DEBUG [main] ====> Parameters: 1(Integer)
+    DEBUG [main] <====      Total: 1
+    DEBUG [main] <==      Total: 1
+    Person [id=1, name=小明, sex=男, age=22]
+    Card [id=1, code=43280119980091]
+
+可以看到，查询 ``Person`` 信息时 ``Person`` 对应的 ``Card`` 对象也被查询出来了。
+
+10.1.2 一对多
+++++++++++++++++++++
+
+在实际项目开发中，一对多是非常常见的关系，比如，一个班级可以有多个学生，一个学生只能属于一个班级，
+班级和学生之间是一对多的关系，而学生和班级之间是多对一的关系。在数据库中一对多关系通常使用主外键关联，
+外键列应该在多方，即多方维护关系。下面我们就用一个示例来看看MyBatis怎么处理一对多关系。
+
+示例：OneToManyTest
+
+首先，给之前创建的mybatis数据库创建两个表tb_clazz和tb_student，并插入测试数据。SQL脚本如下：
+
+.. code:: sql 
+
+    use mybatis;
+    # 取消外键检查
+    SET FOREIGN_KEY_CHECKS=0;
+    # 创建tb_clazz表
+    DROP TABLE IF EXISTS `tb_clazz`;
+    CREATE TABLE `tb_clazz` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `code` varchar(18) NOT NULL,
+    `name` varchar(18) NOT NULL,
+    PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    # 插入数据到tb_clazz表
+    INSERT INTO `tb_clazz` VALUES ('1', 'B151516', 'Java基础班');
+
+    DROP TABLE IF EXISTS `tb_student`;
+    CREATE TABLE `tb_student` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `name` varchar(18) DEFAULT NULL,
+    `sex` varchar(18) DEFAULT NULL,
+    `age` int(11) DEFAULT NULL,
+    `clazz_id` int(11) DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    KEY `clazz_id` (`clazz_id`),
+    CONSTRAINT `tb_student_ibfk_1` FOREIGN KEY (`clazz_id`)
+    REFERENCES `tb_clazz` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+    INSERT INTO `tb_student` VALUES ('1', '小明', '男', '24', '1');
+    INSERT INTO `tb_student` VALUES ('2', '小王', '男', '23', '1');
+    INSERT INTO `tb_student` VALUES ('3', '小芳', '女', '22', '1');
+    INSERT INTO `tb_student` VALUES ('4', '小丽', '女', '22', '1');
+
+.. note::
+
+    tb_student表的clazz_id作为外键参照tb_clazz表的主键id。在mybatis数据库中执行SQL脚本，
+    完成创建数据库和表的操作。接下来，创建一个Clazz对象和一个Student对象分别映射tb_clazz和tb_student表。
+
+程序清单：
+codes/10/OneToManyTest/src/org/fkit/domain/Clazz.java
+
+.. code:: java
+
+    public class Clazz implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Integer id; // 班级id，主键
+        private String code; // 班级编号
+        private String name; // 班级名称
+        // 班级和学生是一对多的关系，即一个班级可以有多个学生
+        private List<Student> students;
+        public Clazz()
+        {
+            super();
+        }
+        // 此处省略getter和setter方法,请自己补上
+        // 此处省略toString方法.
+    }
+
+班级和学生之间是一对多的关系，即一个班级可以有多个学生。在Clazz类当中定义了一个students属性，
+该属性是一个List集合，用来映射一对多的关联关系，表示一个班级有多个学生。
+
+程序清单：
+codes/10/OneToManyTest/src/org/fkit/domain/Student.java
+
+.. code:: java
+
+    public class Student implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Integer id; // 学生id，主键
+        private String name; // 姓名
+        private String sex;  // 性别
+        private Integer age; // 年龄
+        // 学生和班级是多对一的关系，即一个学生只属于一个班级
+        private Clazz clazz;
+        public Student()
+        {
+            super();
+        }
+        // 此处省略getter和setter方法,请自己补上
+        // 省略toStrring方法.
+    }
+
+学生和班级之间是多对一的关系，即一个学生只属于一个班级。在 Student类当中定义了一个clazz属性，
+该属性是一个Clazz类型，用来映射多对一的关联关系，表示该学生所属的班级。
+
+再接下来是XML映射文件。
+
+程序清单：
+codes/10/OneToManyTest/src/org/fkit/mapper/ClazzMapper.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <!-- namespace指用户自定义的命名空间。 -->
+    <mapper namespace="org.fkit.mapper.ClazzMapper">
+        <!-- 根据id查询班级信息，返回resultMap -->
+        <select
+            id="selectClazzById"
+            parameterType="int"
+            resultMap="clazzResultMap"> SELECT * FROM tb_clazz WHERE id = #{id}
+        </select>
+        <!-- 映射Clazz对象的resultMap -->
+        <resultMap
+            type="org.fkit.domain.Clazz"
+            id="clazzResultMap">
+            <id
+                property="id"
+                column="id"/>
+            <result
+                property="code"
+                column="code"/>
+            <result
+                property="name"
+                column="name"/>
+            <!-- 一对多关联映射:collection fetchType="lazy"表示懒加载 -->
+            <collection
+                property="students"
+                javaType="ArrayList"
+                ofType="org.fkit.domain.Student"
+                column="id"
+                select="org.fkit.mapper.StudentMapper.selectStudentByClazzId"
+                fetchType="lazy">
+                <id
+                    property="id"
+                    column="id"/>
+                <result
+                    property="name"
+                    column="name"/>
+                <result
+                    property="sex"
+                    column="sex"/>
+                <result
+                    property="age"
+                    column="age"/>
+            </collection>
+        </resultMap>
+    </mapper>
+
+ClazzMapper.xml中定义了一个 ``<select.../>``，其根据id查询班级信息。由于Clazz类除了简单的属性 
+``id``、``code``、``name`` 以外，还有一个关联对象 ``students``，所以返回的是一个名为
+``clazzResultMap的resultMap``。由于students是一个List集合，所以 ``clazzResultMap`` 中使用了 
+``<collection.../>`` 元素映射一对多的关联关系，``select`` 属性表示会使用 ``column`` 属性的
+``id`` 值作为参数执行 ``StudentMapper`` 中定义的 ``selectStudentByClazzId`` 查询该班级对应的所有学生数据，
+查询出的数据将被封装到property表示的students对象当中。
+
+还使用了一个新的属性fetchType，该属性的取值有 ``eager`` 和 ``lazy``
+
+* eager表示立即加载，即查询Clazz对象的时候，会立即执行关联的 ``selectStudentByClazzId`` 中定义的SQL语句去查询班级的所有学生；
+* lazy表示懒加载，其不会立即发送SQL语句去查询班级的所有学生，而是等到需要使用到班级的students属性时，
+  才会发送SQL语句去查询班级的所有学生。
+* fetch机制更多的是为了性能考虑，如果查询班级时确定会访问班级的所有学生，则该属性应该被设置为eager；
+  如果查询班级时只是查询班级信息，有可能不会访问班级的所有学生，则该属性应该被设置为lazy。
+  正常情况下，一对多所关联的集合对象，都应该被设置成lazy。
+
+使用懒加载还需要在mybatis-config.xml中增加如下配置：
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8" ?>
+    <!DOCTYPE configuration
+    PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-config.dtd">
+    <!-- XML 配置文件包含对 MyBatis 系统的核心设置 -->
+    <configuration>
+        <!-- 省略其他配置...... -->
+        <!-- 指定 MyBatis 所用日志的具体实现 -->
+        <settings>
+        <!-- 省略其他配置...... -->
+            <!-- 要使延迟加载生效必须配置下面两个属性 -->
+            <setting
+                name="lazyLoadingEnabled"
+                value="true"/>
+            <setting
+                name="aggressiveLazyLoading"
+                value="false"/>
+        </settings>
+        <!-- 省略其他配置...... -->
+    </configuration>
+
+* lazyLoadingEnabled属性表示延迟加载的全局开关。当开启时，所有关联对象都会延迟加载。默认为false。
+* aggressiveLazyLoading 属性启用时，会使带有延迟加载属性的对象立即加载；反之，每种属性将会按需加载。
+  默认为true，所以这里需要设置成false。
+
+程序清单：
+codes/10/OneToManyTest/src/org/fkit/mapper/StudentMapper.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <!-- namespace指用户自定义的命名空间。 -->
+    <mapper namespace="org.fkit.mapper.StudentMapper">
+        <!-- 根据id查询学生信息，多表连接，返回resultMap -->
+        <select
+            id="selectStudentById"
+            parameterType="int"
+            resultMap="studentResultMap"> SELECT * FROM tb_clazz c,tb_student s WHERE c.id = s.clazz_id
+            AND s.id = #{id}
+        </select>
+        <!-- 根据班级id查询学生信息，返回resultMap -->
+        <select
+            id="selectStudentByClazzId"
+            parameterType="int"
+            resultMap="studentResultMap"> SELECT * FROM tb_student WHERE clazz_id = #{id}
+        </select>
+        <!-- 映射Student对象的resultMap -->
+        <resultMap
+            type="org.fkit.domain.Student"
+            id="studentResultMap">
+            <id
+                property="id"
+                column="id"/>
+            <result
+                property="name"
+                column="name"/>
+            <result
+                property="sex"
+                column="sex"/>
+            <result
+                property="age"
+                column="age"/>
+            <!-- 多对一关联映射:association -->
+            <association
+                property="clazz"
+                javaType="org.fkit.domain.Clazz">
+                <id
+                    property="id"
+                    column="id"/>
+                <result
+                    property="code"
+                    column="code"/>
+                <result
+                    property="name"
+                    column="name"/>
+            </association>
+        </resultMap>
+    </mapper>
+
+StudentMapper.xml中定义了一个 ``<select id=＂selectStudentById＂.../>``，其会根据学生id查询学生信息，
+由于Student类除了简单的属性id、name、sex和age之外，还有一个关联对象clazz，所以它返回的是一个名为
+``clazzResultMap`` 的resultMap。clazzResultMap中使用了 ``<association.../>`` 元素映射多对一的关联关系，
+因为 ``<select id=＂selectStudentById＂.../>`` 的SQL语句是一条多表连接，关联 ``tb_clazz`` 
+表的同时查询班级数据，所以 ``<association.../>`` 只是简单地装载数据。
+
+.. note::
+
+    在实际开发中，一对多关系通常映射为集合对象，而由于多方的数据量可能很大，所以通常使用懒加载；
+    而多对一只是关联到一个对象，所以通常使用多表连接直接把数据提取出来。
+    StudentMapper.xml中还定义了一个 ``<select id=＂selectStudentByClazzId ＂.../>``，
+    其会根据班级id查询所有学生信息，该查询用于ClazzMapper.xml中的关联查询。
+
+再接下来是mapper接口对象。
+
+程序清单：
+codes/10/OneToManyTest/src/org/fkit/mapper/ClazzMapper.java
+
+.. code:: java
+
+    public interface ClazzMapper {
+        // 根据id查询班级信息
+        Clazz selectClazzById(Integer id);
+    }
+
+程序清单：
+codes/10/OneToManyTest/src/org/fkit/mapper/StudentMapper.java
+
+.. code:: java
+
+    public interface StudentMapper {
+        /**
+        * 根据id查询学生信息
+        * @param id
+        * @return Student对象.
+        */
+        Student selectStudentById(Integer id);
+    }
+
+最后，完成测试类。
+
+程序清单：
+codes/10/OneToManyTest/src/org/fkit/test/OneToManyTest.java
+
+.. code:: java
+
+    public class OneToManyTest {
+        public static void main(String[] args) {
+            // 1.定义SqlSession变量
+            SqlSession sqlSession = null;
+            try
+            {
+                // 2.创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                OneToManyTest t = new OneToManyTest();
+                t.testSelectClazzById(sqlSession);
+                // t.testSelectStudentById(sqlSession);
+                // 提交事务
+                sqlSession.commit();
+            } catch (Exception e)
+            {
+                // 回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            } finally
+            {
+                // 关闭SqlSession
+                if (sqlSession != null)
+                    sqlSession.close();
+            }
+        }
+        // 测试一对多，查询班级Clazz（一）的时候级联查询学生Student（多）
+        public void testSelectClazzById(SqlSession sqlSession)
+        {
+            // 1.获得ClazzMapper接口的代理对象
+            ClazzMapper cm = sqlSession.getMapper(ClazzMapper.class);
+            // 2.调用接口的代理对象的selectClazzById方法
+            Clazz clazz = cm.selectClazzById(1);
+            // 查看查询到的clazz对象信息
+            System.out.println(clazz.getId() + " " + clazz.getCode() + " " + clazz.getName());
+            // 查看clazz对象关联的学生信息
+            List<Student> students = clazz.getStudents();
+            students.forEach(stu -> System.out.println(stu));
+        }
+        // 测试多对一，查询学生Student（多）的时候级联查询 班级Clazz（一）
+        public void testSelectStudentById(SqlSession sqlSession)
+        {
+            // 获得StudentMapper接口的代理对象
+            StudentMapper sm = sqlSession.getMapper(StudentMapper.class);
+            // 调用selectStudentById方法
+            Student stu = sm.selectStudentById(1);
+            // 查看查询到的Student对象信息
+            System.out.println(stu);
+            // 查看Student对象关联的班级信息
+            System.out.println(stu.getClazz());
+        }
+    }
+
+项目的 mybatis-config.xml 和 log4j.xml 文件内容请参考配套资源文件，此处不再赘述。
+在OneToManyTest类中定义了一个 ``testSelectClazzById()`` 方法，该方法用于测试一对多关系，
+查询班级Clazz（一）的时候关联查询学生Student（多）的信息。
+
+运行 OneToManyTest 类的main方法，其通过 ``SqlSession`` 的 ``getMapper(Class<T>type)`` 
+方法获得mapper接口的代理对象 ``ClazzMapper``，调用 ``selectClazzById`` 方法时会执行 ClazzMapper.xml中 
+``<select id=＂selectClazzById＂.../>`` 的元素中定义的SQL语句。控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: SELECT * FROM tb_clazz c,tb_student s WHERE c.id = s.clazz_id AND s.id = ? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 1
+    Student [id=1, name=Java基础班, sex=男, age=24]
+    Clazz [id=1, code=B151516, name=Java基础班]
+
+可以看到，MyBatis只是执行了查询班级的SQL语句，由于 ``<select id=＂selectClazzById＂.../>`` 
+中的 ``<collection fetchType=＂lazy＂/>`` 使用的是懒加载，因此，当没有使用到关联的学生对象时，
+并没有发送查询学生的SQL语句。
+
+修改 ``testSelectClazzById()`` 方法，增加访问关联学生的代码：
+
+再次运行 OneToManyTest 类的 main 方法。控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: SELECT * FROM tb_clazz WHERE id = ? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 1
+    1 B151516 Java基础班
+    DEBUG [main] ==>  Preparing: SELECT * FROM tb_student WHERE clazz_id = ? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 4
+    Student [id=1, name=小明, sex=男, age=24]
+    Student [id=2, name=小王, sex=男, age=23]
+    Student [id=3, name=小芳, sex=女, age=22]
+    Student [id=4, name=小丽, sex=女, age=22]
+
+可以看到，MyBatis执行了查询班级的SQL语句之后，又执行了根据clazz_id查询学生信息的SQL语句。
+这就是所谓的懒加载。
+增加一个testSelectStudentById（）方法，测试多对一关系。在main方法中运行 ``testSelectStudentById()`` 方法，
+控制台显示如下：
+
+可以看到，MyBatis执行了一个多表查询语句，并且将查询到的班级信息封装到了学生对象的关联属性中。
+
+10.1.3 多对多
+++++++++++++++++++++
+
+在实际项目开发中，多对多关系也是非常常见的关系，比如，一个
+购物系统中，一个用户可以有多个订单，这是一对多的关系；一个订单
+中可以购买多种商品，一种商品也可以属于多个不同的订单，订单和商
+品之间就是多对多的关系。对于数据库中多对多的关系建议使用一个中
+间表来维护关系，中间表中的订单id作为外键参照订单表的id，商品id
+作为外键参照商品表的id。下面我们就用一个示例来看看MyBatis怎么
+处理多对多关系。
+
+示例：ManyToManyTest
+
+首先，给之前创建的mybatis数据库创建三个表tb_user、tb_article和tb_order，
+再创建一个中间表维护tb_article和tb_order的关系，并插入测试数据。SQL脚本如下：
+
+.. code:: sql
+
+    use mybatis;
+    # 创建用户表
+    DROP TABLE IF EXISTS `tb_user`;
+    CREATE TABLE `tb_user` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `username` varchar(18) DEFAULT NULL,
+    `loginname` varchar(18) NOT NULL,
+    `password` varchar(18) NOT NULL,
+    `phone` varchar(18) DEFAULT NULL,
+    `address` varchar(18) DEFAULT NULL,
+    PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    # 插入用户
+    INSERT INTO `tb_user` VALUES ('1', '小明', 'xiaoming', 'xiaoming', '123456789123', '北京');
+    # 创建商品表
+    DROP TABLE IF EXISTS `tb_article`;
+    CREATE TABLE `tb_article` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `name` varchar(18) DEFAULT NULL,
+    `price` double DEFAULT NULL,
+    `remark` varchar(18) DEFAULT NULL,
+    PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    # 插入商品
+    INSERT INTO `tb_article` VALUES ('1', '商品1', '123.12', 'xxx的伟大著作');
+    INSERT INTO `tb_article` VALUES ('2', '商品2', '12.3', 'yyy的伟大著作');
+    INSERT INTO `tb_article` VALUES ('3', '商品3', '34.22', 'zzz的著作');
+    # 创建订单表
+    DROP TABLE IF EXISTS `tb_order`;
+    CREATE TABLE `tb_order` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `code` varchar(32) DEFAULT NULL,
+    `total` double DEFAULT NULL,
+    `user_id` int(11) DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    KEY `user_id` (`user_id`),
+    CONSTRAINT `tb_order_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `tb_user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    # 插入订单
+    INSERT INTO `tb_order` VALUES ('1', 'abcseeeahoaugoeijgiej', '223.33', '1');
+    INSERT INTO `tb_order` VALUES ('2', 'sfaofosfhodsfuefie', '111.22', '1');
+    # 创建订单-商品关系表
+    DROP TABLE IF EXISTS `tb_item`;
+    CREATE TABLE `tb_item` (
+    `order_id` int(11) NOT NULL DEFAULT '0',
+    `article_id` int(11) NOT NULL DEFAULT '0',
+    `amount` int(11) DEFAULT NULL,
+    PRIMARY KEY (`order_id`,`article_id`),
+    KEY `article_id` (`article_id`),
+    CONSTRAINT `tb_item_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `tb_order` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `tb_item_ibfk_2` FOREIGN KEY (`article_id`) REFERENCES `tb_article` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    # 插入商品-订单
+    INSERT INTO `tb_item` VALUES ('1', '1', '1');
+    INSERT INTO `tb_item` VALUES ('1', '2', '1');
+    INSERT INTO `tb_item` VALUES ('1', '3', '3');
+    INSERT INTO `tb_item` VALUES ('2', '1', '2');
+    INSERT INTO `tb_item` VALUES ('2', '2', '3');
+
+.. note::
+
+    tb_order表的user_id作为外键参照tb_user表的主键id。tb_item表作为中间表，用来维护
+    tb_article和tb_order的多对多关系，tb_imte表的 order_id作为外键参照tb_order表的主键id，
+    article_id作为外键参照 tb_article表的主键id 在mybatis数据库中执行SQL脚本，
+    完成创建数据库和表的操作。
+
+接下来，创建一个User对象、一个Article对象和一个Order对象分别映射tb_user、tb_article和tb_order表。
+
+程序清单：
+codes/10/ManyToManyTest/src/org/fkit/domain/User.java
+
+.. code:: java
+
+    public class User implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Integer id;  // 用户id，主键
+        private String username;  // 用户名
+        private String loginname; // 登录名
+        private String password;  // 密码
+        private String phone;    // 联系电话
+        private String address;  // 收货地址
+        // 用户和订单是一对多的关系，即一个用户可以有多个订单
+        private List<Order> orders;
+        public User() {
+            super();
+            // TODO Auto-generated constructor stub
+        }
+        public User(String username, String loginname, String password, String phone, String address) {
+            super();
+            this.username = username;
+            this.loginname = loginname;
+            this.password = password;
+            this.phone = phone;
+            this.address = address;
+        }
+        // 此处省略getter和setter方法,请自己补上
+        @Override
+        public String toString() {
+            return "User [id=" + id + ", username=" + username + ", loginname=" + loginname
+                    + ", password=" + password + ", phone=" + phone + ", address=" + address + "]";
+        }
+    }
+
+用户和订单之间是一对多的关系，即一个用户可以有多个订单。在User类中定义了一个orders属性，
+该属性是一个List集合，用来映射一对多的关联关系，表示一个用户有多个订单。
+
+程序清单：
+codes/10/ManyToManyTest/src/org/fkit/domain/Order.java
+
+.. code:: java
+
+    public class Order implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Integer id;  // 订单id，主键
+        private String code;  // 订单编号
+        private Double total; // 订单总金额
+        // 订单和用户是多对一的关系，即一个订单只属于一个用户
+        private User user;
+        // 订单和商品是多对多的关系，即一个订单可以包含多种商品
+        private List<Article> articles;
+        public Order() {
+            super();
+            // TODO Auto-generated constructor stub
+        }
+        public Order(String code, Double total) {
+            super();
+            this.code = code;
+            this.total = total;
+        }
+        // 此处省略getter和setter方法,请自己补上
+        @Override
+        public String toString() {
+            return "Order [id=" + id + ", code=" + code + ", total=" + total + "]";
+        }
+    }
+
+* 订单和用户之间是多对一的关系，一个订单只属于一个用户，在Order 类中定义了一个user属性，
+  用来映射多对一的关联关系，表示该订单的用户；
+* 订单和商品之间是多对多的关系，即一个订单中可以包含多种商品，在Order类中定义了一个articles属性，
+  该属性是一个List集合，用来映射多对多的关联关系，表示一个订单中包含多种商品。
+
+程序清单：
+codes/10/ManyToManyTest/src/org/fkit/domain/Article.java
+
+.. code:: java
+
+    public class Article implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private Integer id;		// 商品id，主键
+        private String name;	// 商品名称
+        private Double price;	// 商品价格
+        private String remark;	// 商品描述
+        // 商品和订单是多对多的关系，即一种商品可以包含在多个订单中
+        private List<Order> orders;
+        public Article() {
+            super();
+            // TODO Auto-generated constructor stub
+        }
+        public Article(String name, Double price, String remark) {
+            super();
+            this.name = name;
+            this.price = price;
+            this.remark = remark;
+        }
+        // 此处省略getter和setter方法,请自己补上
+        @Override
+        public String toString() {
+            return "Article [id=" + id + ", name=" + name + ", price=" + price + ", remark=" + remark
+                    + "]";
+        }
+    }
+
+商品和订单之间是多对多的关系，即一种商品可以出现在多个订单中。在 Article 类中定义了一个 orders 属性，
+该属性是一个 List 集合，用来映射多对多的关联关系，表示该商品关联的多个订单。
+
+再接下来是XML映射文件。
+
+程序清单：
+codes/10/ManyToManyTest/src/org/fkit/mapper/UserMapper.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <!-- namespace指用户自定义的命名空间。 -->
+    <mapper namespace="org.fkit.mapper.UserMapper">
+        <select
+            id="selectUserById"
+            parameterType="int"
+            resultMap="userResultMap"> SELECT * FROM tb_user WHERE id = #{id}
+        </select>
+        <resultMap type="org.fkit.domain.User" id="userResultMap">
+            <id
+                property="id"
+                column="id"/>
+            <result
+                property="username"
+                column="username"/>
+            <result
+                property="loginname"
+                column="loginname"/>
+            <result
+                property="password"
+                column="password"/>
+            <result
+                property="phone"
+                column="phone"/>
+            <result
+                property="address"
+                column="address"/>
+            <!-- 一对多关联映射:collection -->
+            <collection
+                property="orders"
+                javaType="ArrayList"
+                column="id"
+                ofType="org.fkit.domain.User"
+                select="org.fkit.mapper.OrderMapper.selectOrderByUserId"
+                fetchType="lazy">
+                <id property="id" column="id"/>
+                <result property="code" column="code"/>
+                <result property="total" column="total"/>
+            </collection>
+        </resultMap>
+    </mapper>
+
+UserMapper.xml中定义了一个 ``<select.../>``，其根据id查询用户信息。由于User类除了简单的属性
+id、username、loginname、password、phone和address之外，还有一个关联对象orders，
+所以返回的是一个名为 ``userResultMap`` 的 resultMap。由于 orders 是一个 List 集合，
+因此userResultMap 中使用了 ``<collection.../>`` 元素映射一对多的关联关系，select 属性表示会使用
+column属性的id值作为参数执行OrderMapper中定义的selectOrderByUserId查询该用户下的所有订单，
+查询出的数据将被封装到property表示的orders对象当中。注意，一对多使用的都是lazy（懒加载）。
+
+程序清单：
+codes/10/ManyToManyTest/src/org/fkit/mapper/OrderMapper.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <!-- namespace指用户自定义的命名空间。 -->
+    <mapper namespace="org.fkit.mapper.OrderMapper">
+        <!-- 注意，如果查询出来的列同名，例如tb_user表的id和tb_order表的id都是id，同名，需要使用别名区分 -->
+        <select
+            id="selectOrderById"
+            parameterType="int"
+            resultMap="orderResultMap"> SELECT u.*,o.id AS oid,CODE,total,user_id FROM tb_user
+            u,tb_order o WHERE u.id = o.user_id AND o.id = #{id}
+        </select>
+        <!-- 根据userid查询订单 -->
+        <select
+            id="selectOrderByUserId"
+            parameterType="int"
+            resultType="org.fkit.domain.Order"> SELECT * FROM tb_order WHERE user_id = #{id}
+        </select>
+        <resultMap
+            type="org.fkit.domain.Order"
+            id="orderResultMap">
+            <id
+                property="id"
+                column="oid"/>
+            <result
+                property="code"
+                column="code"/>
+            <result
+                property="total"
+                column="total"/>
+            <!-- 多对一关联映射:association -->
+            <association
+                property="user"
+                javaType="org.fkit.domain.User">
+                <id
+                    property="id"
+                    column="id"/>
+                <result
+                    property="username"
+                    column="username"/>
+                <result
+                    property="loginname"
+                    column="loginname"/>
+                <result
+                    property="password"
+                    column="password"/>
+                <result
+                    property="phone"
+                    column="phone"/>
+                <result
+                    property="address"
+                    column="address"/>
+            </association>
+            <!-- 多对多映射的关键:collection -->
+            <collection
+                property="articles"
+                javaType="ArrayList"
+                column="oid"
+                ofType="org.fkit.domain.Article"
+                select="org.fkit.mapper.ArticleMapper.selectArticleByOrderId"
+                fetchType="lazy">
+                <id property="id" column="id"/>
+                <result property="name" column="name"/>
+                <result property="price" column="price"/>
+                <result property="remark" column="remark"/>
+            </collection>
+        </resultMap>
+    </mapper>
+
+OrderMapper.xml中定义了一个 ``<select id=＂selectOrderByUserId＂.../>``，其根据用户id查询订单信息，
+返回的是简单的Order对象。
+
+同时定义了一个 ``<select id=＂selectOrderById＂.../>``，其根据订单id查询订单信息，
+由于Order类和用户是多对一关系，和商品是多对多关系，而多对一通常都是立即加载，
+因此SQL语句是一条关联了tb_user和tb_order的多表查询语句。查询结果返回一个名为orderResultMap
+的resultMap。orderResultMap中使用了 ``<association.../>`` 元素映射多对一的关联关系，
+其将查询到的用户信息装载到Order对象的user属性当中；
+
+orderResultMap中还使用了 ``<collection.../>`` 元素映射多对多的关联关系，select 
+属性表示会使用 column 属性的 oid 值作为参数执行ArticleMapper 中定义的 selectArticleByOrderId 
+查询该订单中的所有商品，查询出的数据将被封装到property表示的articles对象当中。注意，
+一对多使用的都是lazy（懒加载）。
+
+.. note::
+
+    因为多表查询返回的结果集中tb_user有个id列，tb_order也有个id 列，当列同名时，
+    MyBatis使用的元素中的column属性如果是id，则 MyBatis会默认使用查询出的第一个id列。
+    为了区分同名的列，最好的方法是给列取一个别名。SQL语句中的 o.id AS oid，resultMap
+    中的 column=＂oid＂就是指使用的是tb_order表的id值。
+
+程序清单：
+codes/10/ManyToManyTest/src/org/fkit/mapper/ArticleMapper.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <!-- namespace指用户自定义的命名空间。 -->
+    <mapper namespace="org.fkit.mapper.ArticleMapper">
+        <select
+            id="selectArticleByOrderId"
+            parameterType="int"
+            resultType="org.fkit.domain.Article"> SELECT * FROM tb_article WHERE id IN ( SELECT article_id
+            FROM tb_item WHERE order_id = #{id} )
+        </select>
+    </mapper>
+
+ArticleMapper.xml中定义了一个 ``<select id=＂selectArticleByOrderId＂.../>``，
+其根据订单id查询订单关联的所有商品，由于订单和商品是多对多的关系，数据库使用了一个中间表 
+tb_item维护多对多的关系，故此处使用了一个子查询，首先根据订单 id 到中间表中查询出所有的商品，
+之后根据所有商品的id查询出所有的商品信息，并将这些信息封装到Article对象当中。
+再接下来是mapper接口对象。
+
+程序清单：
+codes/10/ManyToManyTest/src/org/fkit/mapper/UserMapper.java
+
+.. code:: java
+
+    public interface UserMapper {
+        User selectUserById(int id);
+    }
+
+程序清单：
+codes/10/ManyToManyTest/src/org/fkit/mapper/OrderMapper.java
+
+.. code:: java
+
+    public interface OrderMapper {
+        Order selectOrderById(int id);
+    }
+
+最后，完成测试类。
+
+程序清单：
+codes/10/OneToManyTest/src/org/fkit/test/ManyToManyTest.java
+
+.. code:: java
+
+    public class ManyToManyTest {
+        public static void main(String[] args) {
+            // 定义SqlSession变量
+            SqlSession sqlSession = null;
+            try {
+                // 创建SqlSession实例
+                sqlSession = FKSqlSessionFactory.getSqlSession();
+                ManyToManyTest t = new ManyToManyTest();
+                // 根据用户id查询用户，测试一对多
+                // t.testSelectUserById(sqlSession);
+                // 根据订单id查询订单，测试多对多
+                t.testSelectOrderById(sqlSession);
+                // 提交事务
+                sqlSession.commit();
+            } catch (Exception e) {
+                // 回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            } finally {
+                // 关闭SqlSession
+                if (sqlSession != null)
+                    sqlSession.close();
+            }
+        }
+        // 测试一对多，查询班级User（一）的时候级联查询订单Order（多）
+        public void testSelectUserById(SqlSession sqlSession) {
+            // 获得UserMapper接口的代理对象
+            UserMapper um = sqlSession.getMapper(UserMapper.class);
+            // 调用selectUserById方法
+            User user = um.selectUserById(1);
+            // 查看查询到的user对象信息
+            System.out.println(user.getId() + " " + user.getUsername());
+            // 查看user对象关联的订单信息
+            List<Order> orders = user.getOrders();
+            orders.forEach(order -> System.out.println(order));
+        }
+        // 测试多对多，查询订单Order（多）的时候级联查询订单的商品Article（多）
+        public void testSelectOrderById(SqlSession sqlSession) {
+            // 获得OrderMapper接口的代理对象
+            OrderMapper om = sqlSession.getMapper(OrderMapper.class);
+            // 调用selectOrderById方法
+            Order order = om.selectOrderById(2);
+            // 查看查询到的order对象信息
+            System.out.println(order.getId() + " " + order.getCode() + " " + order.getTotal());
+            // 查看order对象关联的用户信息
+            User user = order.getUser();
+            System.out.println(user);
+    //        // 查看order对象关联的商品信息
+    //        List<Article> articles = order.getArticles();
+    //        articles.forEach(article -> System.out.println(article));
+        }
+    }
+
+项目的mybatis-config.xml和log4j.xml文件内容请参考配套资源文件，此处不再赘述。
+
+运行ManyToManyTest类的main方法，首先测试 ``testSelectUserById()`` 方法，根据用户id
+查询用户。控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: SELECT * FROM tb_user WHERE id = ? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 1
+    1 小明
+    DEBUG [main] ==>  Preparing: SELECT * FROM tb_order WHERE user_id = ? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 2
+    Order [id=1, code=abcseeeahoaugoeijgiej, total=223.33]
+    Order [id=2, code=sfaofosfhodsfuefie, total=111.22]
+
+可以看到，MyBatis执行了根据用户id查询用户的SQL语句，查询出了用户信息；
+由于在测试方法中立即又获取了用户的订单集合，所以MyBatis又执行了根据用户id查询订单的SQL语句，
+查询出了该用户的两个订单。
+
+接下来测试 ``testSelectOrderById()`` 方法，根据订单id查询订单信息。控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: SELECT u.*,o.id AS oid,CODE,total,user_id FROM tb_user u,tb_order o WHERE u.id = o.user_id AND o.id = ? 
+    DEBUG [main] ==> Parameters: 2(Integer)
+    DEBUG [main] <==      Total: 1
+    2 sfaofosfhodsfuefie 111.22
+    User [id=1, username=小明, loginname=xiaoming, password=xiaoming, phone=123456789123, address=北京]
+
+可以看到，MyBatis执行了一个多表连接查询，同时查询出了订单信息和用户信息，由于测试方法中注释了查询订单中的商品代码，
+故MyBatis采用了懒加载机制，没有立即查询商品信息。
+
+取消 testSelectOrderById（）方法中查询订单中的商品的代码注释，再次执行。控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: SELECT u.*,o.id AS oid,CODE,total,user_id FROM tb_user u,tb_order o WHERE u.id = o.user_id AND o.id = ? 
+    DEBUG [main] ==> Parameters: 2(Integer)
+    DEBUG [main] <==      Total: 1
+    2 sfaofosfhodsfuefie 111.22
+    User [id=1, username=小明, loginname=xiaoming, password=xiaoming, phone=123456789123, address=北京]
+    DEBUG [main] ==>  Preparing: SELECT * FROM tb_article WHERE id IN ( SELECT article_id FROM tb_item WHERE order_id = ? ) 
+    DEBUG [main] ==> Parameters: 2(Integer)
+    DEBUG [main] <==      Total: 2
+    Article [id=1, name=商品1, price=123.12, remark=xxx的伟大著作]
+    Article [id=2, name=商品2, price=12.3, remark=yyy的伟大著作]
+
+可以看到，MyBatis执行了ArticleMapper.xml中定义的子查询，查询
+出了订单所关联的所有商品信息。
+
+.. note::
+
+    多对多查询因为关联到中间表查询，所以读者需要对数据库的SQL知识有一定的了解。
+
+10.2 MyBatis动态SQL
+------------------------
+
+MyBatis 还有一个强大特性就是它的动态SQL。
+
+在实际项目开发中，经常需要根据不同条件拼接SQL语句，拼接时一定不能忘了必要的空格，
+有时候还要注意省略掉列名列表最后的逗号，等等。在使用 JDBC 或其他类似持久层框架操作数据库时，
+处理这种情况是非常麻烦的，甚至可以用痛苦来形容，而在MyBatis中利用动态SQL这一特性可以很简单地解决这个问题。
+
+动态 SQL元素和使用 JSTL 或其他类似基于XML 的文本处理器相似，MyBatis 采用功能强大的基于OGNL的表达式来完成动态SQL。
+OGNL 的表达式可以用在任意的SQL映射语句中。
+
+常用的动态SQL元素包括：
+
+* if
+* choose (when、otherwise)
+* where
+* set
+* foreach
+* bind
+
+下面我们就用一个简单示例来看看在MyBatis中怎么使用动态SQL。
+
+示例：DynamicSQLTest
+
+首先，给之前创建的mybatis数据库创建一个表tb_employee，并插入测试数据。SQL脚本如下：
+
+.. code:: sql
+
+    # 创建数据表
+    DROP TABLE IF EXISTS `tb_employee`;
+    CREATE TABLE `tb_employee` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `loginname` varchar(18) DEFAULT NULL,
+    `password` varchar(18) DEFAULT NULL,
+    `name` varchar(18) DEFAULT NULL,
+    `sex` char(2) DEFAULT NULL,
+    `age` int(11) DEFAULT NULL,
+    `phone` varchar(21) DEFAULT NULL,
+    `sal` double DEFAULT NULL,
+    `state` varchar(255) DEFAULT NULL,
+    PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    # 插入数据
+    INSERT INTO `tb_employee` VALUES ('1', 'xiaoming', 'xiaoming', '小明', '男', '19', '123456789123', '9800', 'active');
+    INSERT INTO `tb_employee` VALUES ('2', 'xiaowang', 'xiaowang', '小王', '男', '21', '123456789123', '6800', 'active');
+    INSERT INTO `tb_employee` VALUES ('3', 'xiaoli', 'xiaoli', '小丽', '女', '23', '123456789123', '7800', 'active');
+    INSERT INTO `tb_employee` VALUES ('4', 'xiaofang', 'xiaofang', '小芳', '女', '22', '123456789123', '8800', 'active');
+
+在mybatis数据库中执行SQL脚本，完成创建数据库和表的操作。
+
+接下来，创建一个Employee对象映射tb_employee表。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/domain/Employee.java
+
+.. code:: java
+
+    package domain;
+    public class Employee {
+        private Integer id;
+        private String loginname;
+        private String password;
+        private String name;
+        private String sex;
+        private Integer age;
+        private String phone;
+        private double sal;
+        private String state;
+        // 构造方法
+        public Employee() {
+            super();
+        }
+        // 此处省略getter和setter方法,请自己补上
+        @Override
+        public String toString() {
+            return "Employee [id=" + id + ", loginname=" + loginname + ", password=" + password
+                    + ", name=" + name + ", sex=" + sex + ", age=" + age + ", phone=" + phone + ", sal="
+                    + sal + ", state=" + state + "]";
+        }
+    }
+
+10.2.1 if
++++++++++++++
+
+动态SQL通常会做的事情是有条件地包含 where 子句的一部分。比如：
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+    <mapper namespace="mapper.EmployeeMapper">
+        <!-- 测试if标签 -->
+        <select
+            id="selectEmployeeByStateIfId"
+            resultType="domain.Employee">
+            select * from tb_employee where state='active'
+            <if test="id!=null">and id=#{id}</if>
+        </select>
+    </mapper>
+
+以上语句提供了一个可选的根据id查找Employee的功能。如果没有传入id，那么所有处于“ACTIVE”状态的 
+Employee 都会被返回；反之若传入了 id，那么就会把查找 id 内容的Employee结果返回。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+
+.. code:: java
+
+    public interface EmployeeMapper {
+        List<Employee> selectEmployeeByStateIfId(HashMap<String, Object> params);
+    }
+
+以上代码提供了一个和 ``EmployeeMapper.xml`` 中的select元素的id同名的方法，需要注意的是，
+``selectEmployeeByIdLike`` 接受一个HashMap作为参数。
+
+在 MyBatis 中，＃{id}表达式获取参数有两种方式：
+
+* 一是从HashMap 中获取集合中的property对象；
+* 二是从JavaBean中获取property对象。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/OneIfTest.java
+
+.. code:: java
+
+    package test;
+    import java.util.HashMap;
+    import java.util.List;
+    import org.apache.ibatis.session.SqlSession;
+    import domain.Employee;
+    import fractory.SqlSessionFratoryTools;
+    import mapper.EmployeeMapper;
+    public class OneIfTest {
+        public static void main(String[] args)
+        {
+            SqlSession sqlSession = null;
+            // 1.获取SqlSession实例
+            sqlSession = SqlSessionFratoryTools.getSqlSession();
+            // 2.获取mapper接口的代理对象
+            EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+            // 3.创建参数列表
+            HashMap<String, Object> params = new HashMap<String, Object>();
+            params.put("id", 1);
+            List<Employee> employees = employeeMapper.selectEmployeeByStateIfId(params);
+            employees.forEach(employee -> System.out.println("    " + employee));
+        }
+    }
+
+项目的mybatis-config.xml和log4j.xml文件内容请参考配套资源文件，此处不再赘述。
+
+运行DynamicSQLTest类的main方法，其通过 ``SqlSession`` 的 ``getMapper(Class<T> type)``
+方法获得mapper接口的代理对象 EmployeeMapper。调用 ``selectEmployeeByIdLike`` 方法时会执行 
+``EmployeeMapper.xml`` 中 ``<select id=＂selectEmployeeByIdLike＂.../>`` 元素中定义的SQL语句。
+控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: select * from tb_employee where state='active' and id=? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 1
+        Employee [id=1, loginname=xiaoming, password=xiaoming, name=小明, sex=男, age=19, phone=123456789123, sal=9800.0, state=active]
+
+可以看到，执行的SQL语句中因为传入了id属性，所以SQL语句中包含了“and id=？”，查询返回的Emplyee对象就是id为1的对象。
+
+接下来注释以下代码：
+
+.. code:: java
+
+    public static void main(String[] args) {
+        SqlSession sqlSession = null;
+        // 1.获取SqlSession实例
+        sqlSession = SqlSessionFratoryTools.getSqlSession();
+        // 2.获取mapper接口的代理对象
+        EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+        // 3.创建参数列表
+        HashMap<String, Object> params = new HashMap<String, Object>();
+        // params.put("id", 1);
+        List<Employee> employees = employeeMapper.selectEmployeeByStateIfId(params);
+        employees.forEach(employee -> System.out.println("    " + employee));
+    }
+
+再次执行main方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: select * from tb_employee where state='active' 
+    DEBUG [main] ==> Parameters: 
+    DEBUG [main] <==      Total: 4
+        Employee [id=1, loginname=xiaoming, password=xiaoming, name=小明, sex=男, age=19, phone=123456789123, sal=9800.0, state=active]
+        Employee [id=2, loginname=xiaowang, password=xiaowang, name=小王, sex=男, age=21, phone=123456789123, sal=6800.0, state=active]
+        Employee [id=3, loginname=xiaoli, password=xiaoli, name=小丽, sex=女, age=23, phone=123456789123, sal=7800.0, state=active]
+        Employee [id=4, loginname=xiaofang, password=xiaofang, name=小芳, sex=女, age=22, phone=123456789123, sal=8800.0, state=active]
+
+可以看到，由于传递的HashMap中没有id属性，故执行的SQL语句中不再包含 ``and id=？``，
+查询返回了所有state=ACTIVE的数据。
+如果想通过两个或多个条件搜索该怎么办呢？很简单，只要多加入一个或多个条件即可。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.xml
+
+.. code:: xml
+
+    <!-- 测试多个if标签 -->
+    <select
+        id="selectEmployeeByStateIfLoginnamePassword"
+        resultType="domain.Employee">
+        select * from tb_employee where state='active'
+        <if test="loginname != null and password != null"> and loginname = #{loginname} and password = #{password}
+        </if>
+    </select>
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+
+.. code:: java
+
+    List<Employee> selectEmployeeByStateIfLoginnamePassword(HashMap<String, Object> params);
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/DoubleIfTest.java
+
+.. code:: java
+
+    package test;
+    import java.util.HashMap;
+    import java.util.List;
+    import org.apache.ibatis.session.SqlSession;
+    import domain.Employee;
+    import fractory.SqlSessionFratoryTools;
+    import mapper.EmployeeMapper;
+    public class DoubleIfTest {
+        public static void main(String[] args)
+        {
+            SqlSession sqlSession = null;
+            // 1.获取SqlSession实例
+            sqlSession = SqlSessionFratoryTools.getSqlSession();
+            // 2.获取mapper接口的代理对象
+            EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+            // 3.创建参数列表
+            HashMap<String, Object> params = new HashMap<String, Object>();
+            params.put("loginname", "xiaoming");
+            params.put("password", "xiaoming");
+            List<Employee> employees = employeeMapper.selectEmployeeByStateIfLoginnamePassword(params);
+            employees.forEach(employee -> System.out.println("    " + employee));
+        }
+    }
+
+运行DynamicSQLTest类的main方法，测试selectEmployeeByLoginLike（）方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: select * from tb_employee where state='active' and loginname = ? and password = ? 
+    DEBUG [main] ==> Parameters: xiaoming(String), xiaoming(String)
+    DEBUG [main] <==      Total: 1
+        Employee [id=1, loginname=xiaoming, password=xiaoming, name=小明, sex=男, age=19, phone=123456789123, sal=9800.0, state=active]
+
+
+可以看到，执行的SQL语句中因为传入了loginname和password属性，故SQL语句中包含了 
+``and loginname=？and password=？``，查询返回的Emplyee对象就是loginname是 ``xiaoming``，
+并且password是 ``xiaoming`` 的对象。
+
+10.2.2 choose(when、otherwise)
++++++++++++++++++++++++++++++++++++
+
+有些时候，我们不想用所有的条件语句，而只想从中择其一二。针对这种情况，MyBatis 提供了choose元素，
+它有点像 Java 中的 switch 语句。
+
+还是上面的例子，但是这次变为提供了 ``id`` 就按 ``id`` 查找，提供了 ``loginname`` 和 ``password`` 
+就按 ``loginname`` 和 ``password`` 查找，若两者都没有提供，就返回所有 ``sex`` 等于男的 Employee。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.xml
+
+.. code:: xml
+
+    <!-- 测试choose标签 -->
+    <select id="selectEmployeeUserChoose" resultType="domain.Employee">
+        select * from tb_employee where state='active'
+        <choose>
+            <when test="id!=null"> and id=#{id}
+            </when>
+            <when test="loginname != null and password != null">and loginname = #{loginname} and password =
+                #{password}
+            </when>
+            <otherwise>and sex='男'</otherwise>
+        </choose>
+    </select>
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+
+.. code:: java
+
+    List<Employee> selectEmployeeUserChoose(HashMap<String, Object> params);
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/ChooseTest.java
+
+.. code:: java
+
+    public class ChooseTest {
+        public static void main(String[] args) {
+            SqlSession sqlSession = null;
+            // 1.获取SqlSession实例
+            sqlSession = SqlSessionFratoryTools.getSqlSession();
+            // 2.获取mapper接口的代理对象
+            EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+            // 3.创建参数列表
+            HashMap<String, Object> params = new HashMap<String, Object>();
+            params.put("id", 1);
+            params.put("loginname", "xiaowang");
+            params.put("password", "xiaowang");
+            List<Employee> employees = employeeMapper.selectEmployeeUserChoose(params);
+            employees.forEach(employee -> System.out.println("    " + employee));
+        }
+    }
+
+运行 ChooseTest 类的 main 方法，测试 ``selectEmployeeChoose()`` 方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: select * from tb_employee where state='active' and id=? 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 1
+        Employee [id=1, loginname=xiaoming, password=xiaoming, name=小明, sex=男, age=19, phone=123456789123, sal=9800.0, state=active]
+
+可以看到，HashMap 里面传递的参数包括了 ``id``、``loginname`` 和 ``password``，
+执行的SQL语句中因为使用了 ``choose`` 标签，所以SQL语句执行的是按照 ``id`` 查询，
+查询返回的Emplyee对象就是 ``id`` 为 ``1`` 的对象。
+
+接下来注释以下代码：
+
+.. code:: java
+
+    public static void main(String[] args) {
+        SqlSession sqlSession = null;
+        // 1.获取SqlSession实例
+        sqlSession = SqlSessionFratoryTools.getSqlSession();
+        // 2.获取mapper接口的代理对象
+        EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+        // 3.创建参数列表
+        HashMap<String, Object> params = new HashMap<String, Object>();
+        // params.put("id", 1);
+        params.put("loginname", "xiaowang");
+        params.put("password", "xiaowang");
+        List<Employee> employees = employeeMapper.selectEmployeeUserChoose(params);
+        employees.forEach(employee -> System.out.println("    " + employee));
+    }
+
+再次执行main方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: select * from tb_employee where state='active' and loginname = ? and password = ? 
+    DEBUG [main] ==> Parameters: xiaowang(String), xiaowang(String)
+    DEBUG [main] <==      Total: 1
+        Employee [id=2, loginname=xiaowang, password=xiaowang, name=小王, sex=男, age=21, phone=123456789123, sal=6800.0, state=active]
+
+可以看到，HashMap里面传递的参数只包括 ``loginname`` 和 ``password``，所以SQL语句是按照 
+``loginname`` 和 ``password`` 查找，查询返回的Emplyee对象就是 ``loginname`` 是 ``xiaoming``，
+并且 ``password`` 是 ``xiaoming`` 的对象。
+
+接下来注释以下代码：
+
+.. code:: java
+
+    public static void main(String[] args) {
+        SqlSession sqlSession = null;
+        // 1.获取SqlSession实例
+        sqlSession = SqlSessionFratoryTools.getSqlSession();
+        // 2.获取mapper接口的代理对象
+        EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+        // 3.创建参数列表
+        HashMap<String, Object> params = new HashMap<String, Object>();
+        // params.put("id", 1);
+        // params.put("loginname", "xiaowang");
+        // params.put("password", "xiaowang");
+        List<Employee> employees = employeeMapper.selectEmployeeUserChoose(params);
+        employees.forEach(employee -> System.out.println("    " + employee));
+    }
+
+再次执行main方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: select * from tb_employee where state='active' and sex='男' 
+    DEBUG [main] ==> Parameters: 
+    DEBUG [main] <==      Total: 2
+        Employee [id=1, loginname=xiaoming, password=xiaoming, name=小明, sex=男, age=19, phone=123456789123, sal=9800.0, state=active]
+        Employee [id=2, loginname=xiaowang, password=xiaowang, name=小王, sex=男, age=21, phone=123456789123, sal=6800.0, state=active]
+
+可以看到，由于没有传递任何参数，故SQL语句执行的是 ``<otherwise>`` 元素里面的查询条件，即 
+``and sex='男'``，查询返回的Emplyee对象就是 ``sex='男'`` 的对象。
+
+10.2.3 where
+++++++++++++++++
+
+前面几个例子已经很好地解决了动态 SQL 问题。现在回到之前的 if 示例，这次我们将 ``state='ACTIVE'`` 
+也设置成动态的条件，看看会发生什么。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.xml
+
+.. code:: xml
+
+    <select
+        id="selectEmployeeByStateIfId"
+        resultType="domain.Employee">
+        select * from tb_employee where
+        <if test="state!=null"> state=#{state}</if>
+        <if test="id!=null">and id=#{id}</if>
+    </select>
+
+如果传入state参数，则执行正常。
+
+如果没有传入参数，则会执行SQL语句：
+
+.. code:: xml
+
+    select * from tb_employee where
+
+如果只是传入id，则会执行SQL语句：
+
+.. code:: xml
+
+    select * from tb_employee where and id=?
+
+也就是说，如果没有传入state参数，会导致执行失败。这个问题不能简单地用条件语句来解决。
+MyBatis 有一个简单的处理方法，只要简单地修改就能得到想要的效果：
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.xml
+
+.. code:: xml
+
+    <!-- 测试where标签 -->
+    <select
+        id="selectEmployeeUserWhere"
+        resultType="domain.Employee">
+        select * from tb_employee
+        <where>
+            <if test="state!=null"> state=#{state}
+            </if>
+            <if test="id!=null">and id=#{id}</if>
+            <if test="loginname!=null and password!=null"> and loginname=#{loginname} and password=#{password}
+            </if>
+        </where>
+    </select>
+
+where元素知道只有在一个以上的if条件有值的情况下才会插入WHERE子句。而且，
+若最后的内容是“AND”或“OR”开头，则where元素也知道如何将它们去除。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+
+.. code:: java
+
+    List<Employee> selectEmployeeUserWhere(HashMap<String, Object> params);
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/WhereTest.java
+
+.. code:: java
+
+    public class WhereTest {
+        public static void main(String[] args)
+        {
+            SqlSession sqlSession = null;
+            // 1.获取SqlSession实例
+            sqlSession = SqlSessionFratoryTools.getSqlSession();
+            // 2.获取mapper接口的代理对象
+            EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+            // 3.创建参数列表
+            HashMap<String, Object> params = new HashMap<String, Object>();
+            params.put("state", "active");
+            params.put("id", 1);
+            params.put("loginname", "xiaowang");
+            params.put("password", "xiaowang");
+            List<Employee> employees = employeeMapper.selectEmployeeUseWhere(params);
+            employees.forEach(employee -> System.out.println("    " + employee));
+        }
+    }
+
+运行WhereTest类的main方法，测试 ``selectEmployeeLike()`` 方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: select * from tb_employee WHERE state=? and id=? and loginname=? and password=? 
+    DEBUG [main] ==> Parameters: active(String), 1(Integer), xiaowang(String), xiaowang(String)
+    DEBUG [main] <==      Total: 0
+
+可以看到，HashMap里面传递的参数只包括id、loginname和password，所以SQL语句是按照id、loginname和password查找，同时自
+动在SQL语句中添加了where关键字，查询返回的Emplyee对象就是id是 1，loginname是jack，并且password是123456的对象。
+
+接下来注释以下代码：
+
+.. code:: java
+
+    public static void main(String[] args)
+    {
+        SqlSession sqlSession = null;
+        // 1.获取SqlSession实例
+        sqlSession = SqlSessionFratoryTools.getSqlSession();
+        // 2.获取mapper接口的代理对象
+        EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+        // 3.创建参数列表
+        HashMap<String, Object> params = new HashMap<String, Object>();
+        // params.put("state", "active");
+        //params.put("id", 1);
+        //params.put("loginname", "xiaowang");
+        //params.put("password", "xiaowang");
+        List<Employee> employees = employeeMapper.selectEmployeeUseWhere(params);
+        employees.forEach(employee -> System.out.println("    " + employee));
+    }
+
+再次执行main方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: select * from tb_employee 
+    DEBUG [main] ==> Parameters: 
+    DEBUG [main] <==      Total: 4
+        Employee [id=1, loginname=xiaoming, password=xiaoming, name=小明, sex=男, age=19, phone=123456789123, sal=9800.0, state=active]
+        Employee [id=2, loginname=xiaowang, password=xiaowang, name=小王, sex=男, age=21, phone=123456789123, sal=6800.0, state=active]
+        Employee [id=3, loginname=xiaoli, password=xiaoli, name=小丽, sex=女, age=23, phone=123456789123, sal=7800.0, state=active]
+        Employee [id=4, loginname=xiaofang, password=xiaofang, name=小芳, sex=女, age=22, phone=123456789123, sal=8800.0, state=active]
+
+当没有传入参数时，MyBatis查询返回了所有数据。
+
+10.2.4 set
+++++++++++++++++
+
+关于动态更新语句还可以使用set元素。set元素可以用于动态包含需要更新的列，而舍去其他的。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.xml
+
+.. code:: java
+
+    <!-- 根据员工Id查询员工信息 -->
+    <select
+        id="selectEmployeeById"
+        parameterType="int"
+        resultType="domain.Employee"> select * from tb_employee where id=#{id};
+    </select>
+    <!-- 测试set标签 -->
+    <update
+        id="updateEmployeeUseSet"
+        parameterType="domain.Employee">
+        update tb_employee
+        <set>
+            <if test="loginname!=null">loginname=#{loginname}</if>
+            <if test="password!=null">,password=#{password}</if>
+            <if test="name!=null">,name=#{name}</if>
+            <if test="sex!=null">,sex=#{sex}</if>
+            <if test="age!=null">,age=#{age}</if>
+            <if test="phone!=null">,phone=#{phone}</if>
+            <if test="sal!=null">,sal=#{sal}</if>
+            <if test="state!=null">,state=#{state}</if>
+        </set>
+        where id=#{id}
+    </update>
+
+set 元素会动态前置 SET 关键字，同时也会消除无关的逗号，
+因为使用了条件语句之后很可能就会在生成的赋值语句的后面留下这些逗号。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+
+.. code:: java
+
+    Employee selectEmployeeById(Integer id);
+    void updateEmployeeUseSet(Employee employee);
+
+需要注意的是，updateEmployeeIfNecessary 方法传递的参数不是之前使用的 HashMap，而是一个 
+Employee 对象，因为通常在进行更新操作时都是先查询出一个实体对象再进行更新操作。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/SetTest.java
+
+.. code:: java
+
+    public class SetTest {
+        public static void main(String[] args) {
+            SqlSession sqlSession = null;
+            // 1.获取SqlSession实例
+            sqlSession = SqlSessionFratoryTools.getSqlSession();
+            // 2.获取mapper接口的代理对象
+            EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+            Employee employee = employeeMapper.selectEmployeeById(1);
+            System.out.println("查询到的员工信息:" + employee);
+            if (employee != null) {
+                employee.setName("新名字");
+                employee.setSal(123);
+                employeeMapper.updateEmployeeUseSet(employee);
+                sqlSession.commit();
+            }
+            employee = employeeMapper.selectEmployeeById(1);
+            System.out.println("更新后的员工信息:" + employee);
+        }
+    }
+
+运行DynamicSQLTest类的main方法，测试 ``updateEmployeeUseSet()`` 方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: select * from tb_employee where id=?; 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 1
+    查询到的员工信息:Employee [id=1, loginname=xiaoming, password=xiaoming, name=小明, sex=男, age=19, phone=123456789123, sal=9800.0, state=active]
+    DEBUG [main] ==>  Preparing: update tb_employee SET loginname=? ,password=? ,name=? ,sex=? ,age=? ,phone=? ,sal=? ,state=? where id=? 
+    DEBUG [main] ==> Parameters: xiaoming(String), xiaoming(String), 新名字(String), 男(String), 19(Integer), 123456789123(String), 123.0(Double), active(String), 1(Integer)
+    DEBUG [main] <==    Updates: 1
+    DEBUG [main] ==>  Preparing: select * from tb_employee where id=?; 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 1
+    更新后的员工信息:Employee [id=1, loginname=xiaoming, password=xiaoming, name=新名字, sex=男, age=19, phone=123456789123, sal=123.0, state=active]
+
+可以看到，首先执行了一条查询语句，查询id为4的员工，之后执行了一条update语句，根据传入的Employee对象更新员工信息。
+切换到数据库，可以看到id为4的员工信息已经更新。
+
+10.2.5 foreach
++++++++++++++++++++
+
+关于动态 SQL 另外一个常用的操作就是需要对一个集合进行遍历，通常发生在构建 IN条件语句时。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.xml
+
+.. code:: xml
+
+    <select
+        id="seletEmployeeInIdList"
+        resultType="domain.Employee">
+        select * from tb_employee where id in
+        <foreach
+            item="item"
+            index="index"
+            collection="list"
+            open="("
+            separator=","
+            close=")"> #{item}
+        </foreach>
+    </select>
+
+foreach 元素的功能非常强大，它允许指定一个集合，声明可以用在元素体内的集合项和索引变量。
+它也允许指定开闭匹配的字符串以及在迭代中间放置分隔符。这个元素是很智能的，因此它不会随机地附加多余的分隔符。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+
+.. code:: java
+
+    List<Employee> seletEmployeeInIdList(List<Integer> ids);
+
+selectEmployeeIn方法传入的参数是一个List集合，该集合中的每一个Integer元素表示需要查询的员工的id。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/ForEachTest.java
+
+.. code:: java
+
+    public class ForEachTest {
+        public static void main(String[] args) {
+            SqlSession sqlSession = null;
+            // 1.获取SqlSession实例
+            sqlSession = SqlSessionFratoryTools.getSqlSession();
+            // 2.获取mapper接口的代理对象
+            EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+            List<Integer> ids = new ArrayList<Integer>();
+            ids.add(1);
+            ids.add(2);
+            ids.add(3);
+            List<Employee> employees = employeeMapper.seletEmployeeInIdList(ids);
+            employees.forEach(employee -> System.out.println("    " + employee));
+        }
+    }
+
+运行DynamicSQLTest类的main方法，测试 ``seletEmployeeInIdList()`` 方法，控制台显示如下：
+
+可以看到，执行的SQL语句是一个in条件语句，返回的是List集合中的id为1和2的员工数据。
+
+10.2.6 bind
++++++++++++++++++
+
+bind元素可以从 OGNL 表达式创建一个变量并将其绑定到上下文。
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.xml
+
+.. code:: xml
+
+    <!-- 测试bind属性 -->
+    <select
+        id="seletEmployeeLikeName"
+        resultType="domain.Employee">
+        <!-- 创建OGNL表达式并绑定到上下文的pattern属性中 -->
+        <!-- _parameter表示传递的Employee对象 -->
+        <!-- _parameter.getName()表示调用参数(Employee对象)的getName方法 -->
+        <!-- 两个下划线`__`是like子句的通配符,一个下划线可以匹配一个字符,两个下划线表示可以匹配两个字符 -->
+        <!-- like子句还有一个通配符%(百分号)这个通配符可以匹配任意多个字符 -->
+        <!-- 整个表达式表示匹配以_parameter.getName()获取到的员工名字开通,并且后面还有两个任意字符的字符串 -->
+        <bind
+            name="pattern"
+            value="_parameter.getName()+'__'"/>
+        <!-- 通过mybatis表达式获取上下文中的pattern属性值 -->
+        select * from tb_employee where loginname like #{pattern}
+    </select>
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+
+.. code:: java
+
+    List<Employee> seletEmployeeLikeName(Employee employee);
+
+程序清单：
+codes/10/DynamicSQLTest/src/org/fkit/mapper/BindTest.java
+
+.. code:: java
+
+    public class BindTest {
+        public static void main(String[] args)
+        {
+            SqlSession sqlSession = null;
+            // 1.获取SqlSession实例
+            sqlSession = SqlSessionFratoryTools.getSqlSession();
+            // 2.获取mapper接口的代理对象
+            EmployeeMapper employeeMapper = sqlSession.getMapper(EmployeeMapper.class);
+            Employee find = new Employee();
+            find.setName("xiao");
+            List<Employee> employees = employeeMapper.seletEmployeeLikeName(find);
+            employees.forEach(employee -> System.out.println("    " + employee));
+        }
+    }
+
+运行DynamicSQLTest类的main方法，测试selectEmployeeLikeName（）方法，控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: select * from tb_employee where loginname like ? 
+    DEBUG [main] ==> Parameters: xiao__(String)
+    DEBUG [main] <==      Total: 1
+        Employee [id=3, loginname=xiaoli, password=xiaoli, name=小丽, sex=女, age=23, phone=123456789123, sal=7800.0, state=active]
+
+可以看到，执行的SQL语句是一个like模糊查询语句，返回的是“loginname”包含“xiao的所有数据。
+
+10.3 MyBatis调用存储过程
+----------------------------
+
+SQL 语句在执行的时候需要先编译，然后执行。数据库的存储过程（Procedure）是一组为了完成特定功能的SQL语句，
+编译后存储在数据库中，用户通过指定存储过程的名字并给定参数（如果该存储过程带有参数）来调用存储过程。
+
+使用存储过程可提高数据库执行速度，并且存储过程可以重复使用，从而减少数据库开发人员的工作量。
+
+现如今大多数数据库都支持存储过程，包括Oracle、MySQL等，很多企业在项目开发中都使用存储过程，
+特别是金融行业和银行系统。下面重点介绍如何使用MyBatis调用存储过程。
+
+示例：MyBatis调用存储过程
+
+本示例直接使用第8章创建的tb_user表、数据库脚本、User.java、mybatis-config.xml和log4j.xml，
+具体请参考第8章内容，此处不再赘述。
+
+10.3.1 插入数据
++++++++++++++++++++
+
+在之前创建的mybatis数据库中创建一个插入tb_user表数据的存储过程。SQL脚本如下：
+
+以上存储过程代码解释如下：
+（1）DELIMITER是MySQL解释器，该段命令是否已经结束了，MySQL是否可以执行了，因为在MySQL当中，默认情况下一遇到分号，它就要自动执行。
+（2）在存储过程中使用参数时，除了参数名和参数类型之外，还建议指定参数的mode（模式），可选值为IN、OUT和INOUT三种。入参使用IN，出参（返回）使用OUT，输入输出参数使用INOUT。
+（3）LAST_INSERT_ID（）是 MySQL的函数，和AUTO_INCREMENT 属性一起使用，当往带有 AUTO_INCREMENT 属性字段的表中新增数据时，LAST_INSERT_ID（）函数返回该字段的值。
+
+提示
+关于MySQL存储过程的知识，已超出了本书的范围，更多内容请读者自行参考MySQL的官方文档。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/mapper/UserMapper.xml
+
+.. code:: xml
+
+
+
+``<insert…/>`` 元素调用名为“insert_user”的存储过程完成一个插入数据的操作。调用存储过程时，
+需要把statementType属性的值设置为“CALLABLE”。“call”是用来调用存储过程的关键字，需要注意的是，
+OUT模式的参数必须指定jdbcType，这是因为在IN模式下，MyBatis提供了默认的jdbcType，而在OUT模式下没有提供。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/mapper/UserMapper.java
+
+.. code:: java
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/test/ProcedureTest.java
+
+.. code:: java
+
+运行ProcedureTest类的main方法，测试testSaveUser （）方法，插
+入一个用户数据并输出自动生成的id值。控制台显示如下：
+可以看到，MyBatis 调用了名为“insert_user”的存储过程，并且传入
+了 4 个参数，插入成功后返回的id值为1，打开数据库，可以看到
+tb_user表中插入了一条记录，如图10.1所示。
+再使用“insert_user”存储过程向tb_user表中插入几条数据，用于接
+下来的测试。数据插入结果如图10.2所示。
+图10.1 存储过程插入数据结果
+图10.2 测试数据
+
+10.3.2 查询数据返回集合
++++++++++++++++++++++++++
+
+在之前创建的mybatis数据库中创建一个查询tb_user表所有数据的存
+储过程。SQL脚本如下：
+在UserMapper.xml中加入调用名为“select_user”存储过程的<select…/>元素。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/mapper/UserMapper.xml
+
+``<select…/>`` 元素调用名为 ``select_user`` 的存储过程查询所有 ``User`` 数据并返回 List，
+查询到的每一条数据会被封装到 ``User`` 对象，这和之前执行SQL语句返回数据的方式完全一致。
+在UserMapper.java接口中加入抽象方法。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/mapper/UserMapper.java
+
+.. code:: java
+
+    List<User> selectUser();
+
+在procedureTest类中加入测试方法。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/test/ProcedureTest.java
+
+.. code:: java
+
+    // 测试查询所有数据
+    public void testSelectUser(SqlSession sqlSession){
+        // 获得UserMapper接口的代理对象
+        UserMapper um = sqlSession.getMapper(UserMapper.class);
+        // 调用查询所有User数据的方法
+        List<User> users = um.selectUser();
+        // 遍历打印每一个User对象
+        users.forEach(user -> System.out.println(user));
+    }
+
+修改main方法测试查询所有数据。
+
+运行ProcedureTest类的main方法，测试 ``testSelectUser()`` 方法，调用存储过程查询所有用户信息。控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: {call select_user()} 
+    DEBUG [main] ==> Parameters: 
+    DEBUG [main] <==      Total: 6
+    DEBUG [main] <==    Updates: 0
+        User [id=1, name=小明, sex=男, age=21]
+        User [id=2, name=小王, sex=男, age=22]
+        User [id=3, name=小丽, sex=女, age=18]
+        User [id=4, name=小芳, sex=女, age=18]
+        User [id=5, name=小王, sex=男, age=22]
+        User [id=6, name=小李, sex=男, age=23]
+
+10.3.3 根据id查询数据返回对象
++++++++++++++++++++++++++++++++++++
+
+在之前创建的mybatis数据库中创建一个根据id查询tb_user表对应数据的存储过程。SQL脚本如下：
+
+.. code:: sql
+
+    drop procedure if exists select_user_by_id;
+    delimiter $$
+    create procedure select_user_by_id(IN in_id INTEGER)
+    begin
+        select id,name,sex,age from tb_user where id=in_id;
+    end
+    $$
+    delimiter;
+
+在UserMapper.xml中加入调用名为 ``select_user_by_id`` 的存储过程的 ``<select…/>`` 元素。
+
+.. code:: xml
+
+    <select
+        id="selectUserById"
+        parameterType="int"
+        resultType="domain.User"
+        statementType="CALLABLE"> {call select_user_by_id(#{id,mode=IN})}
+    </select>
+
+``<select…/>`` 元素调用名为 ``select_user_by_id`` 的存储过程根据 id 查询对应的数据并返回User对象，这和之前执行SQL语句返回数据的方式完全一致。
+在UserMapper.java接口中加入抽象方法。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/mapper/UserMapper.java
+
+.. code:: java
+
+    User selectUserById(Integer id);
+
+在procedureTest类中加入测试方法。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/test/ProcedureTest.java
+
+.. code:: java
+
+    // 测试根据id查询对应的数据
+    public void testSelectUserById(SqlSession sqlSession){
+        // 获得UserMapper接口的代理对象
+        UserMapper um = sqlSession.getMapper(UserMapper.class);
+        // 调用根据id查询User数据的方法
+        User user = um.selectUserById(1);
+        System.out.println(user);
+    }
+
+修改main方法测试查询所有数据。
+
+运行ProcedureTest类的main方法，测试 ``testSelectUserById()`` 方法，调用存储过程根据id查询对应的用户信息。
+控制台显示如下：
+
+.. code:: console
+
+    DEBUG [main] ==>  Preparing: {call select_user_by_id(?)} 
+    DEBUG [main] ==> Parameters: 1(Integer)
+    DEBUG [main] <==      Total: 1
+    DEBUG [main] <==    Updates: 0
+        User [id=1, name=小明, sex=男, age=21]
+
+10.3.4 修改数据
++++++++++++++++++++++
+
+在之前创建的mybatis数据库中创建一个修改tb_user表数据的存储过程。SQL脚本如下：
+
+
+在UserMapper.xml中加入调用名为“update_user”的存储过程的<update…/>元素。
+程序清单：
+codes/10/procedureTest/src/org/fkit/mapper/UserMapper.xml
+
+<update…/>元素调用名为“update_user”的存储过程修改User数据。
+
+在UserMapper.java接口中加入抽象方法。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/mapper/UserMapper.java
+
+.. code:: java
+
+在procedureTest类中加入测试方法。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/test/ProcedureTest.java
+
+.. code:: java
+
+修改main方法测试查询所有数据。
+运行ProcedureTest类的main方法，测试testModifyUser （）方法，
+调用存储过程修改数据。控制台显示如下：
+执行 testModifyUser（）方法时，先调用“select_user_by_id”存储过
+程查询 id 为 1 的 User数据，之后调用“update_user”存储过程修改该
+User 数据。打开数据库，可以看到执行修改存储过程之后tb_user表的记
+录，如图10.3所示。
+图10.3 修改后的记录
+
+10.3.5 删除数据
+++++++++++++++++++++
+
+在之前创建的mybatis数据库中创建一个删除tb_user表数据的存储过程。SQL脚本如下：
+在UserMapper.xml中加入调用名为“delete_user_by_id”的存储过程的<delete…/>元素。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/mapper/UserMapper.xml
+
+.. code:: java
+
+<delete…/>元素调用名为“delete_user_by_id”的存储过程根据id删除User数据。
+在UserMapper.java接口中加入抽象方法。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/mapper/UserMapper.java
+
+.. code:: java
+
+在procedureTest类中加入测试方法。
+
+程序清单：
+codes/10/procedureTest/src/org/fkit/test/ProcedureTest.java
+
+.. code:: java
+
+修改main方法测试查询所有数据。
+运行ProcedureTest类的main方法，测试testRemoveUser （）方法，
+调用存储过程删除数据。控制台显示如下：
+执行testRemoveUser （）方法时，先调用“select_user_by_id”存储过
+程查询id为1的User数据，之后调用“delete_user_by_id”存储过程将该
+User数据删除。打开数据库，可以看到tb_user表中id为1的数据已经被删
+除了。
+常见的存储过程大概就是以上几种，包括插入、查询、修改、删
+除，读者掌握了这几种MyBatis调用存储过程的方法后，在实际项目开
+发中几乎可以应对所有的开发场景了。
+
+10.4 MyBatis事务管理
+-------------------------
+
+使用MyBatis可以很方便地以面向对象的方式进行数据库访问。在所有的Java语言数据库框架中，
+数据库的事务管理都是非常重要的一个方面。同时我们也经常需要合理地利用缓存来加快数据库的查询，
+进而有效地提升数据库的性能。下面将重点介绍MyBatis的事务管理。
+
+10.4.1 事务的概念
+++++++++++++++++++++
+
+每个业务逻辑都是由一系列数据库访问完成的，这一系列数据库访
+问可能会修改多条数据记录，这一系列修改应该是一个整体，绝不能仅
+修改其中的几条数据记录。也就是说，多个数据库原子访问应该被绑定
+成一个整体，这就是事务。事务是一个最小的逻辑执行单元，整个事务
+不能分开执行，要么同时执行，要么同时放弃执行。
+
+事务是一步或几步操作组成的逻辑执行单元，这些基本操作作为一
+个整体执行单元，它们要么全部执行，要么全部取消执行，绝不能仅仅
+执行一部分。一般而言，一个用户请求对应一个业务逻辑方法，一个业
+务逻辑方法往往具有逻辑上的原子性，此时应该使用事务。例如一个转
+账操作，对应修改两个账户的余额，这两个账户的修改要么同时生效，
+要么同时取消，同时生效是转账成功，同时取消是转账失败；但不可只
+修改其中一个账户，那将破坏数据库的完整性。
+
+通常来讲，事务具备4个特性：原子性（Atomicity）、一致性（Consistency）、隔离性（Isolation）
+和持续性（Durability）。这4个特性也简称为ACID特性，具体描述如下：
+
+* 原子性（Atomicity）。 事务是应用中最小的执行单位，就如原子是自然界最小颗粒，
+  具有不可再分的特征一样。事务是应用中不可再分的最小逻辑执行体。
+* 一致性（Consistency）。 事务执行的结果，必须使数据库从一种一致性状态，变到另一种一致性状态。
+  当数据库只包含事务成功提交的结果时，数据库处于一致性状态。如果系统运行发生中断，
+  某个事务尚未完成而被迫中断，而该未完成的事务对数据库所做的修改已被写入数据库，此时，
+  数据库就处于一种不正确的状态。比如银行在两个账户之间转账：从A账户向B账户转入1000元。
+  系统先减少A账户的1000元，然后再为 B 账户增加 1000 元。如果全部执行成功，数据库就处于一致性状态。
+  如果仅执行完A账户金额的修改，而没有增加B账户的金额，则数据库就处于不一致性状态。因此，
+  一致性是通过原子性来保证的。
+* 隔离性（Isolation）。 各个事务的执行互不干扰，任意一个事务的内部操作对其他并发的事务，
+  都是隔离的，即并发执行的事务之间不能互相影响。
+* 持续性（Durability）。 持续性也被称为持久性（Persistence），指事务一旦提交，
+  对数据所做的任何改变都要记录到永久存储器中，通常就是保存到物理数据库。
+
+10.4.2 Transaction接口
++++++++++++++++++++++++++++
+
+MyBatis事务设计的重点是 ``org.apache.ibatis.transaction.Transaction`` 接口，Transaction
+接口有两个实现类，分别是 ``org.apache.ibatis.transaction.jdbc.JdbcTransaction`` 和
+``org.apache.ibatis.transaction.managed.ManagedTransaction``。同时 MyBatis 还设计了 
+``org.apache.ibatis.transaction.TransactionFactory`` 接口和两个实现类
+``org.apache.ibatis.transaction.jdbc.JdbcTransactionFactory`` 和
+``org.apache.ibatis.transaction.managed.ManagedTransactionFactory`` 用来获取事务的实例对象。
+对数据库的事务而言，应该具有以下几个动作：创建（create）、提交（commit）、回滚（rollback）、
+关闭（close）。对应地，MyBatis将事务抽象成了Transaction接口。该接口源代码如下：
+
+
+MyBatis的事务管理分为两种形式：
+使用 JDBC 的事务管理机制。 即利用 java.sql.Connection 对象完成对事务的提交（commit（））、
+回滚（rollback（））和关闭（close（））等操作。
+
+使用MANAGED的事务管理机制。 对于这种机制，MyBatis自身不会去实现事务管理，而是让容器如WebLogic、
+JBoss等来实现对事务的管理。
+
+10.4.3 事务的配置创建和使用
++++++++++++++++++++++++++++
+
+1.事务的配置
+
+我们在使用MyBatis时，一般会在MyBatis的根配置文件mybatisconfig.xml中定义类似如下的信息：
+``<environment >`` 元素定义了连接某个数据库的信息，其子元素 ``<transactionManager>`` 的 type 
+决定我们用什么类型的事务管理机制。
+
+2.事务工厂的创建
+MyBatis 事务的创建是交给
+org.apache.ibatis.transaction.TransactionFactory 事务工厂来完成的。如果我们将
+<transactionManager>的 type 配置为 JDBC，那么，在 MyBatis
+初始化解析<environment>节点时，会根据type=＂JDBC＂创建一个
+JdbcTransactionFactory工厂，其源码如下：
+如上代码所示，如果type=＂JDBC＂，则MyBatis会创建一个
+JdbcTransactionFactory的实例；如果type=＂MANAGED＂，则MyBatis
+会创建一个MangedTransactionFactory的实例。
+
+3.事务工厂TransactionFactory
+通过事务工厂TransactionFactory很容易获取到Transaction对象实
+例。我们以JdbcTransaction为例，看一下JdbcTransactionFactory是怎样生
+成JdbcTransaction的。JdbcTransaction源代码如下：
+如上代码所示，JdbcTransactionFactory会创建JDBC类型的
+Transaction，即JdbcTransaction。类似地，ManagedTransactionFactory 也
+会创建 ManagedTransaction。下面我们分别深入解析JdbcTransaction 和
+ManagedTransaction，看它们到底是怎样实现事务管理的。
+
+4.JdbcTransaction
+JdbcTransaction可直接使用JDBC的提交和回滚事务管理机制。它依
+赖于从dataSource中取得的连接 connection 来管理 transaction 的作用
+域，connection 对象的获取被延迟到调用getConnection（）方法时。如
+果将autocommit设置为on，开启状态的话，则它会忽略commit和
+rollback。
+也就是说，JdbcTransaction是使用java.sql.Connection 上的commit和
+rollback功能来完成事务操作的，JdbcTransaction 只是相当于对
+java.sql.Connection 事务处理进行了再次封装，Transaction的事务管理都
+是通过java.sql.Connection实现的。JdbcTransaction的代码实现如下：
+
+从JdbcTransaction类的源代码可以看出，JdbcTransaction就是使用
+java.sql.Connection 上的commit、rollback功能来完成事务操作的。
+
+5.ManagedTransaction
+ManagedTransaction让容器来管理事务Transaction的整个生命周期，意思就是说，
+使用ManagedTransaction的commit和rollback功能不会对事务有任何的影响，它什么都不会做，
+它将事务管理的权力移交给了容器。ManagedTransaction的代码实现如下：
+
+从ManagedTransaction类的源代码可以看出，提交和回滚时它什么都没有做，所以，
+当使用ManagedTransaction时MyBatis的事务是交给容器来操作管理的。
+
+10.5 MyBatis缓存机制
+-------------------------
+
+在实际项目开发中，通常对数据库查询的性能要求很高，而
+MyBatis提供了查询缓存来缓存数据，从而达到提高查询性能的要求。
+MyBatis的查询缓存分为一级缓存和二级缓存。一级缓存是SqlSession级
+别的缓存，二级缓存是mapper级别的缓存，二级缓存是多个SqlSession
+共享的。MyBatis通过缓存机制减轻数据压力，提高数据库性能。
+
+10.5.1 一级缓存（SqlSession级别）
++++++++++++++++++++++++++++++++++++
+
+MyBatis的一级缓存是 ``SqlSession`` 级别的缓存。在操作数据库时需要构造 ``SqlSession`` 对象，
+在 ``SqlSession`` 对象中有一个 HashMap 用于存储缓存数据。不同的 ``SqlSession`` 
+之间的缓存数据区域（HashMap）是互相不影响的。
+
+一级缓存的作用域是 ``SqlSession`` 范围的，当在同一个 ``SqlSession`` 中执行两次相同的 SQL 
+语句时，第一次执行完毕会将从数据库中查询的数据写到缓存（内存），第二次查询时会从缓存中获取数据，
+不再去底层数据库查询，从而提高查询效率。需要注意的是，如果 ``SqlSession`` 执行了DML操作
+（insert、update和delete），并提交到数据库，MyBatis 则会清空 ``SqlSession`` 中的一级缓存，
+这样做的目的是为了保证缓存中存储的是最新的信息，避免出现脏读现象。
+
+当一个SqlSession结束后该SqlSession中的一级缓存也就不存在了。Mybatis默认开启一级缓存，不需要进行任何配置。
+
+注意 ：
+
+MyBatis的缓存机制是基于id进行缓存的，也就是说，MyBatis使用HashMap缓存数据时，是使用对象的id作为key，对象作为value保存的。
+
+示例：OneLevelCacheTest
+
+接下来我们测试MyBatis的一级缓存。
+本示例使用了第 8 章创建的 tb_user 表、数据库脚本，User.java、mybatis-config.xml 和log4j.xml文件请参考第8章内容，此处不再赘述。
+执行以下SQL脚本，向tb_user表插入几条测试数据：
+
+程序清单：
+codes/10/OneLevelCacheTest/src/org/fkit/mapper/UserMapper.xml
+
+.. code:: java
+
+程序清单：
+codes/10/OneLevelCacheTest/src/org/fkit/mapper/UserMapper.java
+
+.. code:: java
+
+程序清单：
+codes/10/OneLevelCacheTest/src/org/fkit/test/OneLevelCacheTest.java
+
+.. code:: java
+
+运行OneLevelCacheTest类的main方法，测试testCache1 （）方法，控制台显示如下：
+
+
+仔细观察MyBatis的执行结果，在第一次查询id为1的User对象时执行了一条select语句，但是第二次获取id为1的User对象时并没有执行select语句。因为此时一级缓存也就是SqlSession缓存中已经缓存了id为1的User对象，MyBatis直接从缓存中将对象取出来，并没有再次去数据库查询，所以第二次没有再执行select语句。
+
+程序清单：
+codes/10/OneLevelCacheTest/src/org/fkit/test/OneLevelCacheTest.java
+
+.. code:: java
+
+运行OneLevelCacheTest类的main方法，测试testCache2 （）方法，控制台显示如下：
+
+仔细观察MyBatis的执行结果，在第一次查询id为1的User对象时执
+行了一条select语句，接下来执行了一个 delete 操作，MyBatis 为了保证
+缓存中存储的是最新的信息，会清空SqlSession缓存。当第二次获取id为
+1的User对象时一级缓存也就是SqlSession缓存中并没有缓存任何对象，
+所以MyBatis再次执行select语句去查询id为1的User对象。
+如果注释下面代码：
+由于并没有执行DML操作并将操作提交到数据库，故此时MyBatis
+不会清空SqlSession缓存，当再次查询id为1的User对象时不会执行select
+语句。
+
+程序清单：
+codes/10/OneLevelCacheTest/src/org/fkit/test/OneLevelCacheTest.java
+
+.. code:: java
+
+运行OneLevelCacheTest类的main方法，测试testCache3 （）方法，控制台显示如下：
+
+
+仔细观察MyBatis的执行结果，在第一次查询id为1的User对象时执
+行了一条select语句，接下来调用SqlSession的clearCache （）方法，该
+方法会清空SqlSession缓存。当第二次获取id为1的User对象时一级缓存
+中并没有缓存任何对象，所以MyBatis再次执行select语句去查询id为1的
+User对象。
+
+程序清单：
+codes/10/OneLevelCacheTest/src/org/fkit/test/OneLevelCacheTest.java
+
+.. code:: java
+
+运行OneLevelCacheTest类的main方法，测试 ``testCache34()`` 方法，控制台显示如下：
+
+
+仔细观察MyBatis的执行结果，在第一次查询id为1的User对象时执
+行了一条select语句，接下来调用SqlSession的close （）方法，该方法会
+关闭SqlSession缓存。当第二次获取id为1的User对象时一级缓存也就是
+SqlSession缓存是一个全新的对象，一级缓存中并没有缓存任何对象，
+所以MyBatis再次执行select语句去查询id为1的User对象。
+
+10.5.2 二级缓存（mapper级别）
++++++++++++++++++++++++++++++++
+
+二级缓存是 mapper 级别的缓存。使用二级缓存时，多个 SqlSession
+使用同一个 mapper的SQL语句去操作数据库，得到的数据会存在二级缓
+存区域，它同样是使用HashMap进行数据存储的。相比一级缓存
+SqlSession，二级缓存的范围更大，多个SqlSession可以共享二级缓存中
+的数据，二级缓存是跨SqlSession的。
+二级缓存是多个 SqlSession 共享的，其作用域是 mapper 的同一个
+namespace。不同的SqlSession两次执行相同的namespace下的SQL语句，
+且向SQL中传递的参数也相同，即最终执行相同的SQL语句，当第一个
+SqlSession调用close（）方法关闭一级缓存时，第一次从数据库中查询
+到的数据会被保存到二级缓存，第二次查询时会从二级缓存中获取数
+据，不再去底层数据库查询，从而提高查询效率。
+MyBatis默认没有开启二级缓存，需要在setting全局参数中配置开启
+二级缓存。
+示例：TwoLevelCacheTest
+接下来测试MyBatis的二级缓存，所有代码和测试一级缓存的代码
+完全一样，只是需要在配置文件中开启二级缓存。
+
+程序清单：codes/10/TwoLevelCacheTest/src/mybatis-config.xml
+
+.. code:: java
+
+cacheEnabled的value为true时表示在此配置文件下开启二级缓存，
+该属性默认为false。MyBatis 的二级缓存是和命名空间绑定的，即二级
+缓存需要配置在 Mapper.xml 映射文件或者Mapper接口中。在映射文件
+中，命名空间就是XML根节点mapper的namespace属性。在Mapper接口
+中，命名空间就是接口的全限定名称。
+开启默认的二级缓存代码如下：
+默认的二级缓存会有如下作用：
+映射语句文件中的所有SELECT语句将会被缓存。
+映射语句文件中的所有INSERT、UPDATE、DELETE语句会刷新缓存。
+缓存会使用Least Recently Used（LRU 最近最少使用）策略来收回。
+根据时间表（如no Flush Interval，没有刷新间隔），缓存不会以任何时间顺序来刷新。
+缓存会存储集合或对象（无论查询方法返回什么类型的值）的1024个引用。
+缓存会被视为read/write（可读/可写）的，这意味着对象检索不是共享的，而且可以安全地被调用者修改，而不干扰其他调用者或线程所做的潜在修改。
+<cache/>元素中所有这些行为都可以通过cache元素的属性来进行修改。
+
+程序清单：
+codes/10/TwoLevelCacheTest/src/org/fkit/mapper/UserMapper.xml
+
+.. code:: java
+
+以上配置创建了一个LRU缓存，并每隔60s刷新，最大存储512个对象，而且返回的对象被认为是只读的。
+
+cache元素用来开启当前mapper的namespace下的二级缓存。该元素的属性设置如下：
+flushInterval。 刷新间隔。可以被设置为任意的正整数，而且它们代表一个合理的毫秒形式的时间段。默认情况下是不设置，也就是没有刷新间隔，缓存仅仅调用语句时刷新。
+size。 缓存数目。可以被设置为任意正整数，要记住你缓存的对象数目和你运行环境的可用内存资源数目。默认值是1024。
+readOnly。 只读。该属性可以被设置为true或false。只读的缓存会给所有调用者返回缓存对象的相同实例，因此这些对象不能被修改。这提供了很重要的性能优势。可读写的缓存会返回缓存对象的拷贝（通过序列化）。这种方式会慢一些，但是安全，因此默认是false。
+eviction。 收回策略，默认为LRU。有如下几种：
+● LRU。 最近最少使用的策略，移除最长时间不被使用的对象。
+● FIFO。 先进先出策略，按对象进入缓存的顺序来移除它们。
+● SOFT。 软引用策略，移除基于垃圾回收器状态和软引用规则的对象。
+● WEAK。 弱引用策略，更积极地移除基于垃圾收集器状态和弱引用规则的对象。
+
+提示
+
+使用二级缓存时，与查询结果映射的Java对象必须实现java.io.Serializable接口的序列化和反序列化操作，
+如果存在父类，其成员都需要实现序列化接口。实现序列化接口是为了对缓存数据进行序列化和反序列化操作，
+因为二级缓存数据存储介质多种多样，不一定在内存，有可能是硬盘或者远程服务器。
+
+程序清单：
+codes/10/TwoLevelCacheTest/src/org/fkit/mapper/UserMapper.java
+
+.. code:: java
+
+程序清单：
+codes/10/TwoLevelCacheTest/src/org/fkit/test/TwoLevelCacheTest.java
+
+.. code:: java
+
+运行TwoLevelCacheTest类的main方法，控制台显示如下：
+
+仔细观察MyBatis的执行结果，日志中有几条以 ``Cache Hit Ration`` 开头的语句，
+这行日志后面输出的值为当前执行方法的缓存命中率。在第一次查询id为 1 的 User 对象时执行了一条 
+``select``语句，接下来调用 ``SqlSession`` 的 ``close()`` 方法，该方法会关闭 ``SqlSession`` 
+一级缓存，同时会将查询数据保存到二级缓存中。当第二次获取 id 为 1 的 User 对象时重新获得的一级缓存
+``SqlSession`` 中并没有缓存任何对象，但是因为启用了二级缓存，当MyBatis在一级缓存中没有找到 id 为 1 的 User 对象时，
+会去二级缓存中查找，所以不会再次执行select语句。
+
+10.6 本章小结
+-------------------
+
+本章首先介绍了MyBatis的关联映射，包括最常见的一对一、一对多、多对多关联映射，
+动态SQL机制和存储过程调用。这些都是在实际项目开发时最常用的操作，我们需要重点掌握。
+接下来介绍了 MyBatis 的事务管理，包括 ``Transaction`` 和该接口的两个实现类 ``JdbcTransaction`` 
+和 ``ManagedTransaction``，以及它们如何处理事务。
+
+最后介绍了MyBatis的缓存机制，包括一级缓存SqlSession和二级缓存mapper。
+使用缓存可以最大程度地减轻数据查询压力，提高数据库性能

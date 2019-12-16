@@ -1,0 +1,495 @@
+第8章 MyBatis简介
+====================
+
+**本章要点**
+
+* 什么是ORM
+* 流行的ORM框架
+* MyBatis概述
+* MyBatis使用入门
+
+8.1 ORM和MyBatis
+--------------------
+
+目前流行的编程语言，例如 Java、C＃等，都是面向对象的编程语言；而目前主流的数据库产品，
+例如 Oracle、DB2 等，依然是关系数据库。编程语言和底层数据库的发展不协调，催生出了ORM框架，
+ORM框架可作为面向对象编程语言和数据库之间的桥梁。
+
+确切地说，MyBatis并不完全是一种ORM框架，它的设计思想和ORM相似，只是它允许开发人员直接编写SQL语句，
+使得访问数据库更加灵活，更准确地说，它应该是一种 **SQL Mapping** 框架。
+
+8.1.1 对象/关系数据库映射（ORM）
+++++++++++++++++++++++++++++++++++
+
+ORM的全称是Object/Relation Mapping，即对象/关系数据库映射。可以将ORM理解成一种规范，
+它概述了这类框架的基本特征，完成面向对象的编程语言到关系数据库的映射。当ORM框架完成映射后，
+程序员既可以利用面向对象程序设计语言的简单易用性，又可以利用关系数据库的技术优势。
+因此可以把ORM当成应用程序和数据库的桥梁。
+
+当使用一种面向对象的编程语言来进行应用开发时，从项目一开始就采用的是面向对象分析、
+面向对象设计、面向对象编程，但到了持久层数据库访问时，又必须重返关系数据库的访问方式，
+这是一种非常糟糕的感觉。于是人们需要一种工具，它可以把关系数据库包装成面向对象的模型，
+这个工具就是ORM。
+
+ORM框架是面向对象程序设计语言与关系数据库发展不同步时的中间解决方案。随着面向对象数据库的发展，
+其理论逐步完善，最终面向对象数据库会取代关系数据库。只是这个过程不可一蹴而就，ORM框架在此期间会蓬勃发展。
+但随着面向对象数据库的广泛使用，ORM工具会逐渐消亡。
+
+对于时下所有流行的编程语言而言，面向对象的程序设计语言代表了目前程序设计语言的主流和趋势，其具备非常多的优势。比如：
+
+* 面向对象的建模、操作。
+* 多态、继承。
+* 摒弃难以理解的过程。
+* 简单易用，易理解。
+
+但数据库的发展并未能与程序设计语言同步，而且关系数据库系统的某些优势也是面向对象语言目前无法比拟的。比如：
+
+* 大量数据查找、排序。
+* 集合数据连接操作、映射。
+* 数据库访问的并发、事务。
+* 数据库的约束、隔离。
+
+面对这种面向对象语言与关系数据库系统并存的局面，采用ORM就变成一种必然。只要依然采用面向对象程序设计语言，
+底层依然采用关系数据库，中间就少不了ORM工具。采用ORM框架之后，应用程序不再直接访问底层数据库，
+而是以面向对象的方式来操作持久化对象（例如创建、修改、删除等），而ORM框架则将这些面向对象的操作转换成底层的SQL操作。
+
+图8.1显示了ORM工具工作的示意图。
+
+.. figure:: /_static/images/0801.jpg
+   :alt: 
+
+正如图8.1所示，ORM工具的唯一作用就是：把对持久化对象的保存、修改、删除等操作，转换成对数据库的操作。
+由此，程序员可以以面向对象的方式操作持久化对象，而ORM框架则负责将相关操作转换成对应的SQL
+（结构化查询语言）操作。
+
+8.1.2 基本映射方式
+++++++++++++++++++++++
+
+ORM工具提供了持久化类和数据表之间的映射关系，通过这种映射关系的过渡，
+程序员可以很方便地通过持久化类实现对数据表的操作。实际上，所有的ORM工具大致都遵循相同的映射思路。
+ORM有如下几条基本映射关系：
+
+数据表映射类。 持久化类被映射到一个数据表。程序使用这个持久化类来创建实例、修改属性、删除实例时，
+系统自动会转换为对这个表进行CRUD操作。图8.2显示了这种映射关系。
+
+图8.2 数据表对应Model类
+
+.. figure:: /_static/images/0802.jpg
+   :alt: 
+
+正如图8.2所示，受ORM管理的持久化类（就是一个普通Java类）对应一个数据表，只要程序对这个持久化类进行操作，
+系统就可以将其转换成对对应数据库表的操作。
+
+数据表的行映射对象（即实例）。 持久化类会生成很多实例，每个实例就对应数据表中的一行记录。
+当程序在应用中修改持久化类的某个实例时，ORM工具会将其转换成对对应数据表中特定行的操作。
+每个持久化对象对应数据表的一行记录的示意图如图8.3所示。
+
+图8.3 数据表中的记录行对应持久化对象
+
+.. figure:: /_static/images/0803.jpg
+   :alt: 
+
+数据表的列（字段）映射对象的属性。 当程序修改某个持久化对象的指定属性时（持久化实例映射到数据行），
+ORM会将其转换成对对应数据表中指定数据行、指定列的操作。数据表的列被映射到对象属性的示意图如图8.4所示。
+
+图8.4 数据表中的列对应对象的属性
+
+.. figure:: /_static/images/0804.jpg
+   :alt: 
+
+基于这种基本的映射方式，ORM工具可完成对象模型和关系模型之间的相互映射。由此可见，在ORM框架中，
+持久化对象是一种媒介，应用程序只需操作持久化对象，ORM框架则负责将这种操作转换为底层数据库操作。
+这种转换对开发者透明，开发者无须关心内部细节，从而将开发者从关系模型中解放出来，
+使得开发者能以面向对象的思维操作关系数据库。
+
+8.1.3 流行的ORM框架简介
+++++++++++++++++++++++++++
+
+目前ORM框架产品非常多，除了各大著名公司、组织的产品外，甚至其他一些小团队也都推出自己的ORM框架。
+目前流行的ORM框架有如下这些产品：
+
+**JPA**。 JPA本身只是一种ORM规范，并不是ORM产品。它是JavaEE规范制定者向开源世界学习的结果。
+相对于其他开源 ORM 框架，JPA 的最大优势在于它是官方标准，因此具有通用性。
+如果应用程序是面向JPA编程，那么应用程序就可以在各种ORM框架之间自由切换。
+
+**Hibernate**。 目前最流行的开源ORM框架，已经被选为JBoss的持久层解决方案。整个Hibernate
+项目也一并投入了JBoss的怀抱，而JBoss又加入了Red Hat组织。因此，Hibernate属于Red Hat组织的一部分。
+Hibernate灵巧的设计、优秀的性能，以及丰富的文档，都是其风靡全球的重要因素。
+
+**MyBatis** （早期名称是 iBATIS）。 Apache 软件基金组织的子项目。与其称它是一种ORM框架，
+不如称它是一种 **SQL Mapper** 框架，它是一种 *半自动化* 的ORM的实现，曾经在Java EE开发中扮演非常重要的角色，
+但是其并不支持纯粹的面向对象操作，它允许开发人员直接编写SQL语句，更加灵活。
+
+8.1.4 MyBatis概述
++++++++++++++++++++++
+
+MyBatis是一个支持普通SQL查询、存储过程和高级映射的优秀持久层框架。MyBatis去掉了几乎所有的
+JDBC代码和参数的手工设置以及对结果集的检索封装。MyBatis可以使用简单的XML或注解进行配置和原始映射，
+将Java的POJO（Plain Old Java Objects，普通的Java对象）映射成数据库中的记录。
+
+MyBatis 作为持久层框架，其主要思想是将程序中的大量 SQL 语句剥离出来，配置在配置文件中，
+以实现SQL的灵活配置。这样做的好处是将SQL与程序代码分离，做到可以在不修改程序代码的情况下，
+直接在配置文件中修改SQL。
+
+纵观目前主流的ORM，无论Hibernate还是JPA，都对数据库结构提供了较为完整的封装，提供了从POJO
+（Plain Old Java Objects）到数据库表的全套映射机制。程序员往往只需定义好POJO到数据库表的映射关系，
+即可通过 Hibernate或者JPA 提供的方法完成持久层操作。程序员甚至不需要熟练掌握SQL，
+Hibernate/JPA会根据制定的存储逻辑，自动生成对应的SQL并调用JDBC接口加以执行。
+
+大多数情况下（特别是对新项目、新系统的开发而言），这样的机制无往不利，大有一统天下的势头。但是，
+在一些特定的环境下，Hibernate这种一站式的解决方案却未必适合。例如：系统的部分或全部数据来自现有数据库，
+出于安全考虑，只对开发团队提供几条Select SQL（或存储过程）以获取所需数据，具体的表结构不予公开。
+
+开发规范中要求，所有牵涉业务逻辑部分的数据库操作，必须在数据库层由存储过程实现（就金融行业而言，
+工商银行、中国银行、交通银行等商业银行都曾在开发规范中严格指定）。
+
+系统数据处理量巨大，性能要求极为苛刻，这往往意味着我们必须通过经过高度优化的SQL语句（或存储过程）
+才能达到系统性能设计指标。
+
+面对这样的需求，Hibernate 不再适合解决上述问题，甚至无法使用它。此时，
+直接使用JDBC进行数据库操作实际上也是不错的选择，只是拖沓的数据库访问代码、乏味的字段读取操作令人厌烦，
+而“半自动化”的MyBatis，却正好解决了这个问题。
+
+这里的“半自动化”是相对Hibernate等提供了全面的数据库封装机制的“全自动化”ORM实现而言的，
+“全自动”ORM 实现了 POJO 和数据库表之间的映射，以及 SQL 的自动生成和执行。而MyBatis的着力点，
+则在于POJO 与 SQL之间的映射关系。也就是说，使用MyBatis提供的ORM 机制，对业务逻辑实现人员而言，
+面对的是纯粹的 Java 对象，这一点与通过Hibernate实现ORM而言基本一致。而对于具体的数据操作，
+Hibernate会自动生成SQL 语句，而MyBatis则并不会为程序员在运行期间自动生成SQL。具体的SQL需要程序员编写，
+然后通过映射配置文件，将SQL所需的参数及返回的结果字段映射到指定POJO。
+
+相对Hibernate等“全自动”ORM机制而言，MyBatis以 SQL开发的工作量和数据库移植性上的让步，
+为系统设计提供了更大的自由空间。作为“全自动”ORM实现的一种有益补充，MyBatis的存在具有特别的意义。
+
+8.2 MyBatis入门
+-------------------
+
+MyBatis的用法非常简单，我们只要在Java项目中引入MyBatis框架，就能以面向对象的方式操作关系数据库。
+
+8.2.1 MyBatis下载和安装
++++++++++++++++++++++++++++
+
+本书成书之前，MyBatis的最新稳定版本是mybatis-3.4.5，本书所用的代码也是基于该版本测试通过的。
+下载和安装MyBatis请按如下步骤进行：
+
+1. 登录 ``http：//www.mybatis.org`` 站点，即可在页面上看到一个“MyBatis-3.4.5”超链接，
+   单击该超链接即可开始下载MyBatis的压缩包。
+
+2. 解压缩刚下载的压缩包，得到一个名为mybatis-3.4.5的文件夹，该文件夹下包含如下文件结构：
+
+* mybatis-3.4.5.jar。MyBatis的核心类库。
+* mybatis-3.4.5.pdf。MyBatis的参考文档。
+* mybatis-3.4.5-javadoc.jar。MyBatis的API文档。
+* mybatis-3.4.5-sources.jar。MyBatis的源代码。
+* lib。MyBatis所依赖的第三方jar包。
+
+3. 将解压缩路径中的 mybatis-3.4.5.jar 包添加到应用程序的类加载路径中，既可以通过添加环境变量的方式来添加，
+   也可以使用Ant或IDE工具来管理应用程序的类加载路径。
+
+4. 如果直接在控制台编译使用了MyBatis API的类，则需要将mybatis-3.4.5.jar包位置添加到CLASSPATH里。
+   如果使用Ant或者Eclipse等IDE工具，则无须修改环境变量。
+
+经过上面的步骤，就可以在应用程序中使用MyBatis框架的功能了。
+
+.. note::
+
+    由于 MyBatis 的底层依然是基于 JDBC 的，因此在应用程序中使用MyBatis执行持久化时同样少不了JDBC驱动。
+    本示例程序底层采用了MySQL数据库，因此还需要将MySQL数据库驱动添加到应用程序的类加载路径中。
+
+**示例：MyBatis的数据库操作入门**
+
+新建一个项目 MyBatisQs，为了让 Web 应用具有 MyBatis 支持的功能，将 mybatis-3.4.5解压文件夹下
+mybatis-3.4.5.jar和lib文件夹下所有MyBatis框架所依赖的第三方jar包复制到Web应用的lib文件夹下，
+也就是 ``MyBatisQs\WebContent\WEB-INF\lib`` 路径下。
+
+首先，在MySQL数据库中创建一个新的数据库mybatis和tb_user表。SQL脚本如下：
+
+.. code:: sql
+
+    CREATE TABLE `tb_user` (
+    `id` INT(11) NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(18) DEFAULT NULL,
+    `sex` CHAR(2) DEFAULT NULL,
+    `age` INT(11) DEFAULT NULL,
+    PRIMARY KEY  (`id`)
+
+在MySQL数据库中执行SQL脚本，完成创建数据库和表的操作。
+
+前面已经介绍过，在所有的 ORM 框架中都有一个非常重要的媒介：PO（持久化对象）。
+持久化对象的作用就是完成持久化操作，简单地说，就是通过该对象对数据库执行增、删、改的操作，
+以面向对象的方式操作数据库。
+
+应用程序无须直接访问数据库，甚至无须理会底层数据库采用何种数据库，这一切对应用程序完全透明，
+应用程序只需创建、修改、删除持久化对象即可；与此同时，MyBatis则负责把这种操作转换为对指定数据库表的操作。
+
+MyBatis中的PO是非常简单的，其是非侵入式的设计，完全采用普通的Java对象作为持久化对象使用。
+下面即是一个POJO（普通的、传统的Java对象）类。
+
+程序清单：codes/08/MyBatisQs/src/org/fkit/domain/User.java
+
+.. code:: java
+
+    package org.fkit.domain;
+    import java.io.Serializable;
+
+    public class User implements Serializable{
+        private static final long serialVersionUID = 1L;
+        // 用户标识
+        private Integer id;
+        // 用户姓名
+        private String name;
+        // 用户性别
+        private String sex;
+        // 用户年龄
+        private Integer age;
+        
+        // 无参数构造器
+        public User() {
+            super();
+        }
+        // 有参数构造器
+        public User( String name, String sex, Integer age) {
+            super();
+            this.name = name;
+            this.sex = sex;
+            this.age = age;
+        }
+        // setter和getter方法
+        public Integer getId() {
+            return id;
+        }
+        public void setId(Integer id) {
+            this.id = id;
+        }
+        public String getName() {
+            return name;
+        }
+        public void setName(String name) {
+            this.name = name;
+        }
+        public String getSex() {
+            return sex;
+        }
+        public void setSex(String sex) {
+            this.sex = sex;
+        }
+        public Integer getAge() {
+            return age;
+        }
+        public void setAge(Integer age) {
+            this.age = age;
+        }
+        @Override
+        public String toString() {
+            return "User [id=" + id + ", name=" + name + ", sex=" + sex + ", age="
+                    + age + "]";
+        }
+    }
+
+
+仔细看上面这个类的代码，会发现这个类与普通的JavaBean没有任何区别。实际上，MyBatis直接采用了POJO
+（普通的、传统的Java对象）作为持久化类，这就是MyBatis被称非低侵入式设计的原因。
+MyBatis不要求持久化类继承任何父类，或者实现任何接口，这样可保证代码不被污染。
+
+对于MyBatis来说，现在还不理解持久化类User和数据库表之间的对应关系，
+也不理解持久化类的属性与数据表的各个列之间的对应关系。MyBatis是通过XML文件去完成持久化类和数据库表之间的映射关系的。
+
+程序清单：
+codes/08/MyBatisQs/src/org/fkit/mapper/UserMapper.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" 
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+    <!-- namespace指用户自定义的命名空间。 -->
+    <mapper namespace="org.fkit.mapper.UserMapper">
+    <insert id="save" parameterType="org.fkit.domain.User" useGeneratedKeys="true">
+        INSERT INTO TB_USER(name,sex,age) 
+        VALUES(#{name},#{sex},#{age})
+    </insert>
+    </mapper>
+
+上面的XML配置中定义了一条insert语句，详细解释如下：
+
+（1） ``＜mapper namespace=＂org.fkit.mapper.UserMapper＂＞``，为这个 mapper 指定一个唯一的namespace，
+namespace的值习惯上设置成包名+SQL映射文件名，这样就能够保证namespace的值是唯一的，
+例如 ``namespace=＂org.fkit.mapper.UserMapper＂`` 就是 ``org.fkit.mapper（包名）+UserMapper`` （UserMapper.xml文件去除后缀）。
+
+（2）在insert标签中编写了SQL插入语句，设置insert标签的id属性值为save。id属性值必须是唯一的，不能够重复。
+
+（3）使用parameterType属性指明插入时使用的参数类型。
+
+（4）使用 ``useGeneratedKeys=＂true＂`` 表示使用数据库的自动增长策略，这需要底层数据库的支持。
+
+（5）insert标签中只有一条标准的insert语句，用来向TB_USER表插入一条数据，``＃{name}`` 表示取参数中的对象的name属性值。
+
+接下来，通过这个持久化类来完成对数据库的操作：插入一条数据。
+
+对于MyBatis来说，现在还不知道需要连接哪个数据库，以及连接数据库时所用的连接池、
+用户名和密码等详细信息。这些信息对于所有的持久化类都是通用的，MyBatis把这些通用信息称为根配置信息，
+根配置信息需要使用配置文件指定。
+
+程序清单：codes/08/MyBatisQs/src/mybatis-config.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8" ?>
+    <!DOCTYPE configuration
+    PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-config.dtd">
+    <!--  XML 配置文件包含对 MyBatis 系统的核心设置 -->
+    <configuration>
+        <!-- 指定 MyBatis 所用日志的具体实现 -->
+        <settings>
+            <setting name="logImpl" value="LOG4J"/>
+        </settings>
+        <environments default="mysql">
+        <!-- 环境配置，即连接的数据库。 -->
+        <environment id="mysql">
+        <!--  指定事务管理类型，type="JDBC"指直接简单使用了JDBC的提交和回滚设置 -->
+        <transactionManager type="JDBC"/>
+        <!--  dataSource指数据源配置，POOLED是JDBC连接对象的数据源连接池的实现。 -->
+        <dataSource type="POOLED">
+            <property name="driver" value="com.mysql.jdbc.Driver"/>
+            <property name="url" value="jdbc:mysql://127.0.0.1:3306/mybatis"/>
+            <property name="username" value="root"/>
+            <property name="password" value="root"/>
+        </dataSource>
+        </environment>
+    </environments>
+    <!-- mappers告诉了MyBatis去哪里找持久化类的映射文件 -->
+    <mappers>
+        <mapper resource="org/fkit/mapper/UserMapper.xml"/>
+    </mappers>
+    </configuration>
+
+MyBatis根配置文件默认被命名为mybatis-config.xml，应用程序运行时需要先加载该文件。
+
+MyBatis配置文件是一个XML文件，该文件第一行是XML文件声明，指定该XML文件的版本和存储该文件所用的字符集。
+
+MyBatis配置文件的根元素是 ``＜configuration.../＞``，根元素中有 ``＜settings.../＞`` 子元素，
+该元素有很多子元素，本示例只是配置了日志信息，之后可以在控制台看到输出的SQL语句，其在调试中非常有用。
+根元素中还有 ``＜environments.../＞`` 子元素，用来配置MyBatis的环境，即连接的数据库，
+该子元素用于将 SQL 映射应用于多种数据库中。每个数据库对应一个SqlSessionFactory，可以配置多种环境，
+但只能为SqlSessionFactory实例选择一个环境，default属性表示选择的环境。``＜environment.../＞`` 
+子元素用于配置一个环境，``＜transactionManager.../＞`` 子元素用来配置MyBatis当中的事务管理，
+JDBC属性表示直接简单使用JDBC的提交和回滚设置。``＜dataSource.../＞`` 子元素用来配置数据源，
+MyBatis并不推荐采用DriverManager来连接数据库，而是推荐使用数据源来管理数据库连接，
+这样能保证最好的性能。该元素依次有很多 ``＜property.../＞`` 子元素，这些 ``＜property.../＞`` 
+子元素用于配置MyBatis连接数据库的必要信息，如连接数据库的驱动、URL、用户名、密码等信息。
+
+.. note::
+
+    数据源是一种用来提高数据库连接性能的常规手段，数据源会负责维持一个数据库连接池，
+    当程序创建数据源实例时，系统会一次性地创建多个数据库连接，并把这些数据库连接保存在连接池中。
+    当程序需要进行数据库访问时，无须重新获得数据库连接，而是从连接池中取出一个空闲的数据库连接，
+    当程序使用数据库连接访问数据库结束后，无须关闭数据库连接，而是将数据库连接归还给连接池即可。
+    通过这种方式，就可避免频繁地获取数据库连接、关闭数据库连接所导致的性能下降。
+
+根元素中还有 ``＜mappers.../＞`` 子元素，它可以支持多个 ``＜mapper.../＞`` 子元素，每个 ``＜mapper.../＞``
+子元素用于指定一个持久化配置文件。下面是完成数据插入的代码。
+
+程序清单：codes/08/MyBatisQs/src/org/fkit/test/MyBatisTest.java
+
+.. code:: java
+
+    package org.fkit.test;
+    import java.io.InputStream;
+    import org.apache.ibatis.io.Resources;
+    import org.apache.ibatis.session.SqlSession;
+    import org.apache.ibatis.session.SqlSessionFactory;
+    import org.apache.ibatis.session.SqlSessionFactoryBuilder;
+    import org.fkit.domain.User;
+
+    public class MyBatisTest {
+        public static void main(String[] args) {
+            // 创建Session实例
+            SqlSession sqlSession = null;
+            try (// 读取mybatis-config.xml文件
+                    InputStream is = Resources.getResourceAsStream("mybatis-config.xml");
+                ){
+                // 初始化mybatis，创建SqlSessionFactory类的实例
+                SqlSessionFactory sqlSessionFactory = new SqlSessionFactoryBuilder()
+                        .build(is);
+                sqlSession = sqlSessionFactory.openSession();
+                // 创建User对象
+                User user = new User("admin", "男", 26);
+                // 插入数据
+                sqlSession.insert("org.fkit.mapper.UserMapper.save", user);
+                // 提交事务
+                sqlSession.commit();
+            } catch (Exception e) {
+                // 回滚事务
+                sqlSession.rollback();
+                e.printStackTrace();
+            }finally{
+                try {
+                    // 关闭sqlSession
+                    if(sqlSession != null) sqlSession.close();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            } 
+        }
+    }
+
+上面持久化操作的代码非常简单。程序先创建一个User对象，再使用SqlSession的insert（）
+方法来保存User对象即可，这是完全对象化的操作方式，可以说非常简单明了。
+当Java程序以面向对象的方式来操作持久化对象时，MyBatis负责将这种操作转换为底层SQL操作。
+
+执行持久化操作之前，为了查看控制台输出的SQL语句，需要加入日志框架LOG4J的相关jar包，
+该jar包在mybatis-3.4.5解压文件夹下的lib文件夹中可以找到。并在CLASSPATH下增加一个
+log4j.properties文件。
+
+程序清单：codes/08/MyBatisQs/src/log4j.properties
+
+.. code::
+
+    # Global logging configuration
+    log4j.rootLogger=ERROR, stdout
+    # MyBatis logging configuration...
+    log4j.logger.org.fkit.mapper.UserMapper=DEBUG
+    # Console output...
+    log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+    log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+    log4j.appender.stdout.layout.ConversionPattern=%5p [%t] %m%n
+
+配置文件log4j.propertie的余下内容是针对日志格式的，这一内容已经超出本书的范围。
+关于Log4j的更多内容，读者请自行参考Log4j官方文档。
+
+运行MyBatisTest 类的main（）方法，运行完成后，可以看到mybatis数据库中的TB_USER表中包含了
+User实例对应的记录，如图8.5所示。
+
+图8.5 使用MyBatis成功插入记录
+
+.. figure:: /_static/images/0805.jpg
+   :alt: 
+
+同时，在控制台可以观察到执行时的日志信息，其中包括了MyBatis所执行的SQL语句。
+
+有开发经验的读者可以通过日志信息了解MyBatis的执行过程。
+
+正如上面程序中粗体代码所示，在执行 ``session.insert（＂org.fkit.mapper.UserMapper.save＂，user）`` 之前，
+先要获取SqlSession对象。PO只有在SqlSession的管理下才可完成数据库访问。为了使用MyBatis进行持久化操作，
+通常需要执行如下操作步骤：
+
+1. 开发持久化类PO和编写持久化操作的Mapper.xml，在其中定义要执行的SQL语句。
+2. 获取SqlSessionFactory。
+3. 获取SqlSession。
+4. 用面向对象的方式操作数据库。
+5. 关闭事务，关闭SqlSession。
+
+对PO的操作必须在SqlSession的管理下才能同步到数据库。
+SqlSession由SqlSessionFactory工厂产生，SqlSessionFactory是数据库编译后的内存镜像，
+通常一个应用对应一个SqlSessionFactory对象。
+SqlSessionFactory对象通过加载mybatis-config.xml配置文件生成。
+
+上面使用 MyBatis 添加了一条记录，对比 MyBatis 和 JDBC 两种操作方式，不难发现MyBatis的两个显著优点：
+
+* 只需要在Mapper.xml配置文件中编写SQL语句，在应用程序中就可以采用OO方式来访问数据库。
+* 在JDBC访问过程中大量的checked异常被包装成MyBatis的Runtime异常，从而不再要求程序必须处理所有异常。
+
+8.3 本章小结
+--------------
+
+本章介绍了流行的ORM模式，包括现阶段流行的ORM框架。还介绍了MyBatis的概念和入门操作。

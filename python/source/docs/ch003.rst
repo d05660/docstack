@@ -1,0 +1,1757 @@
+第3章 Spring MVC的常用注解
+===========================
+
+**本章要点**
+
+* @Controller注解
+* @RequestMapping注解
+* @GetMapping注解
+* @PostMapping注解
+* @RequestParam注解
+* @PathVariable注解
+* @MatrixVariable注解
+* @CrossOrigin注解
+* @RequestHeader注解
+* @CookieValue注解
+* @RequestAttribute注解
+* @SessionAttribute注解
+* @SessionAttributes注解
+* @ModelAttribute注解
+* @RequestBody注解
+* @ResponseBody注解
+* @RestController注解
+* @ResponseStatus注解
+* @ExceptionHandle注解
+* @ControllerAdvice注解
+* @RestControllerAdvice注解
+
+Spring从2.5版开始引入注解，用户可以在Spring MVC中使用 ``@Controller``、``@RequestMapping``、
+``@RequestParam``、``@ModelAttribute`` 等类似的注解。到目前为止，Spring的版本虽然发生了很大的变化，
+但注解的特性却一直延续下来，并不断扩展，让广大开发者的工作变得更轻松。这都离不开注解的强大作用，
+本章将重点讲解Spring MVC中常用的注解。
+
+3.1 @Controller注解
+----------------------
+
+``org.springframework.stereotype.Controller`` 注解用于指示Spring类的实例是一个控制器，
+使用 ``@Controller`` 注解的类不需要继承特定的父类或者实现特定的接口，相对之前的版本实现 Controller 
+接口变得更加简单。而且 Controller 接口的实现类只能处理一个单一请求动作，而 ``@Controller``
+注解的控制器可以支持同时处理多个请求动作，更加灵活。
+
+``@Controller`` 用于标记一个类，使用它标记的类就是一个Spring MVC Controller对象，即一个控制器类。
+Spring使用扫描机制查找应用程序中所有基于注解的控制器类。分发处理器会扫描使用了该注解的类的方法，
+并检测该方法是否使用了 ``@RequestMapping`` 注解，而使用 ``@RequestMapping`` 
+注解的方法才是真正处理请求的处理器。为了保证 Spring能找到控制器，需要完成两件事情：
+
+* 在Spring MVC的配置文件的头文件中引入 ``spring-context``。
+* 使用 ``＜context：component-scan/＞`` 元素，该元素的功能为：启动包扫描功能，以便注册带有
+  ``@Controller``、``@Service``、``@repository``、``@Component`` 等注解的类成为Spring的Bean。
+  ``base-package`` 属性指定了需要扫描的类包，类包及其递归子包中所有的类都会被处理。
+
+配置文件如下所示：
+
+.. code:: xml
+
+    <context:component-scan base-package="org.fkit.controller" />
+
+应该将所有控制器类都放在基本包下，并且指定扫描该包，即 ``org.fkit.controller``，而不应该指定扫描 
+``org.fkit`` 包，以免Spring MVC扫描了无关的包。
+
+**示例：@Controller注解的使用**
+
+新建一个项目ControllerTest，加入所需的jar文件，示例代码如下：
+
+程序清单：
+codes/03/ControllerTest/src/org/fkit/controller/HelloWorldController
+
+.. code:: java
+
+    package org.fkit.controller;
+
+    import org.springframework.stereotype.Controller;
+    import org.springframework.ui.Model;
+    import org.springframework.web.bind.annotation.RequestMapping;
+
+    /**
+    * HelloWorldController是一个基于注解的控制器, 可以同时处理多个请求动作，并且无须实现任何接口。
+    * org.springframework.stereotype.Controller注解用于指示该类是一个控制器
+    */
+    @Controller
+    public class HelloWorldController
+    {
+        @RequestMapping("/helloWorld")
+        public String helloWorld(Model model)
+        {
+            // 向模型之中添加一个属性
+            model.addAttribute("message", "Hello World!");
+            return "helloWorld";
+        }
+    }
+
+HelloWorldController是一个基于 ``@Controller`` 注解的控制器，``@RequestMapping`` 
+注解用来映射一个请求，``value=＂/helloWorld＂`` 表示请求由 ``helloWorld`` 方法进行处理。
+``helloWorld`` 方法接收一个 ``org.springframework.ui.Model`` 类型的参数，本例在 model
+中添加了一个名为 message 的字符串对象，该对象可以在返回的视图当中通过request对象获取。
+最后，方法返回一个字符串 ``helloWorld`` 作为视图名称。
+
+程序清单：codes/03/ControllerTest/WebContent/WEBINF/springmvc-config.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <beans xmlns="http://www.springframework.org/schema/beans"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:p="http://www.springframework.org/schema/p"
+        xmlns:mvc="http://www.springframework.org/schema/mvc"
+        xmlns:context="http://www.springframework.org/schema/context"
+        xsi:schemaLocation="
+            http://www.springframework.org/schema/beans
+            http://www.springframework.org/schema/beans/spring-beans.xsd
+            http://www.springframework.org/schema/mvc
+            http://www.springframework.org/schema/mvc/spring-mvc.xsd     
+            http://www.springframework.org/schema/context
+            http://www.springframework.org/schema/context/spring-context.xsd">
+            
+        <!-- spring可以自动去扫描base-pack下面的包或者子包下面的java文件，
+            如果扫描到有Spring的相关注解的类，则把这些类注册为Spring的bean -->
+        <context:component-scan base-package="org.fkit.controller"/>
+        <!-- 默认装配方案 -->
+        <mvc:annotation-driven/>
+        <!-- 静态资源处理 -->
+        <mvc:default-servlet-handler/>
+        
+        <!-- 视图解析器  p:prefix属性表示前缀  p:suffix 表示后缀  -->
+        <bean id="viewResolver"
+            class="org.springframework.web.servlet.view.InternalResourceViewResolver"
+            p:prefix="/WEB-INF/content/" p:suffix=".jsp"/> 
+    </beans>
+
+springmvc-config.xml文件配置信息解释如下：
+
+（1）由于使用了@Controller 注解，因此不需要再在配置文件中使用 XML 描述 Bean。
+
+``＜context:component-scan base-package=＂org.fkit.controller＂/＞`` 
+
+指定需要 Spring 扫描 ``org.fkit.controller`` 包及其子包下面的所有java文件。
+
+（2） ``＜mvc:annotation-driven＞`` 是一种简写形式，可以让初学者快速应用默认配置方案。
+``＜mvc：annotation-driven＞`` 会自动注册 ``RequestMappingHandlerMapping`` 与 
+``RequestMappingHandlerAdapter`` 两个Bean，这是Spring MVC为 ``@Controllers`` 分发请求所必需的，
+并提供了数据绑定支持、``@NumberFormatannotation`` 支持、``@DateTimeFormat`` 支持、``@Valid`` 支持、
+读写 XML 的支持（JAXB）和读写 JSON 的支持（默认为 Jackson）等功能。本例处理 Ajax请求时，
+就使用到了对JSON的支持功能。
+
+（3） ``＜mvc:default-servlet-handler/＞`` 是Spring MVC的静态资源处理器，在web.xml中，
+如果将 DispatcherServlet 请求映射配置为 ``/``，则Spring MVC将捕获Web容器所有的请求，
+包括静态资源的请求，而引入类似 ``＜script type=＂text/javascript＂src=＂js/jquery-1.11.0.min.js＂/＞``
+这种静态资源文件的时候，DispatcherServlet 会将 ``/`` 看成请求路径，找不到它的时候会导致提示404错误。
+当在springmvc-config.xml中配置 ``＜mvc:default-servlet-handler/＞`` 后，会在 Spring MVC
+上下文中定义一个 ``org.springframework.web.servlet.resource.DefaultServletHttpRequestHandler``，
+它就像一个检查员，对进入 ``DispatcherServlet`` 的URL进行筛查，如果发现是静态资源的请求，
+就将该请求转由 Web 应用服务器默认的 Servlet 处理；如果不是静态资源的请求，才由 ``DispatcherServlet`` 继续处理。
+
+（4）最后配置了视图解析器 ``InternalResourceViewResolver`` 来解析视图，将View呈现给用户。
+视图解析器中配置的prefix属性表示视图的前缀，suffix表示视图的后缀，返回的视图字符串是 ``helloWorld``，
+经过视图解析器解析之后，视图的完整路径为：``/WEBINF/content/helloWorld.jsp``。需要注意的是，
+此处没有配置处理器映射器和处理器适配器，当用户没有配置这两项时，Spring会使用默认的处理器映射器和处理器适配器处理请求。
+
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器 DispatcherServlet，因为每次配置基本一致，此处不再赘述，读者可自行配置。
+
+部署ControllerTest这个Web应用，在浏览器中输入如下URL来测试应用：
+
+.. code:: xml
+
+    http://localhost:8080/ControllerTest/helloWorld
+
+之后，会看到如图3.1所示的界面，表示Spring MVC访问成功。
+
+图3.1 测试@Controller注解
+
+.. figure:: /_static/images/0301.png
+   :alt: 
+
+Spring MVC 中用于参数绑定的注解有很多，都在 ``org.springframework.web.bind.annotation`` 包中，
+根据它们处理的request的不同内容部分可以分为六类。
+
+* 处理请求参数和内容部分的注解： @RequestMapping、@RequestParam、@GetMapping、@PostMapping、
+  @PutMapping、@DeleteMapping、@PatchMapping、@RequestBody、@ResponseBody、@RequestPart、
+  @RestController。
+* 处理请求URL部分的注解： @PathVariable、@MatrixVariable、@CrossOrigin。
+* 处理请求头部分的注解： @RequestHeader、@CookieValue。
+* 处理属性类型的注解： @RequestAttribute、@SessionAttribute、@SessionAttributes、
+  @ModelAttribute。
+* 处理异常类型的注解： @ExceptionHandler、@ControllerAdvice、@RestControllerAdvice、
+  @ResponseStatus。
+* 绑定表单数据的注解： @InitBinder。
+
+接下来重点讲解常用的Spring MVC注解。``@InitBinder`` 注解用于解决类型转换问题，在第6章中讲解；
+``@RequestPart`` 注解用于绑定 ``multipart/form-data`` 参数，常用于文件上传，在第7章中讲解。
+
+3.2 @RequestMapping注解
+-------------------------
+
+3.2.1 @RequestMapping注解简介
+++++++++++++++++++++++++++++++
+
+开发者需要在控制器内部为每一个请求动作开发相应的处理方法。
+``org.springframework.web.bind.annotation.RequestMapping`` 注解指示Spring
+用哪一个类或方法来处理请求动作，该注解可用于类或方法。
+
+.. note::
+
+    ``@RequestMapping`` 注解虽然也包含在 ``org.springframework.web.bind.annotation`` 里面，
+    但是严格来说，它并不属于参数绑定注解。
+    ``@RequestMapping`` 注解可以用来注释一个控制器类，在这种情况下，所有方法都将映射为相对于类级别的请求，
+    表示该控制器处理的所有请求都被映射到value属性所指示的路径下。
+
+示例代码如下：
+
+.. code:: java
+
+    @Controller
+    @RequestMapping(value="/user")
+    public class UserController
+    {
+        @RequestMapping(value="/register")
+        public String register()
+        {
+            return "register";
+        }
+        @RequestMapping(value="/login")
+        public String login(){
+            return "login";
+        }
+    }
+
+由于UserController类中添加了 ``value=＂/user＂`` 的 @RequestMapping 注解，
+因此所有相关路径都要加上 ``＂/user＂``，此时方法被映射到如下请求URL：
+
+.. code:: java
+
+    http://localhost:8080/user/register
+    http://localhost:8080/user/login
+
+使用@RequestMapping注解可指定如表3.1所示的属性。
+
+表3.1@RequestMapping注解支持的属性
+
+.. csv-table:: 
+   :header: 属性, 类型, 是否必要, 说明
+   :widths: auto
+   :align: left
+
+   value, String数组, 否, 用于将指定请求的实际地址映射到方法上
+   name, String, 否, 给映射地址指定一个别名
+   method, RequestMethod数组, 否, "映射指定请求的方法类型,包括GET、POST、HEAD、 OPTIONS、PUT、PATCH、DELETE、TRACE几种类型"
+   consumes, String数组, 否, "指定处理请求的提交内容类型(Content-Type),例如 application/json、 text/html等"
+   parms, String数组, 否, "指定request中必须包含某些参数值时,才让该方法处理"
+   headers, String数组, 否, "指定 request中必须包含某些指定的 header值时,才能让该方法处理请求"
+   path, String数组, 否, "在Servlet环境中只有: URI路径映射(例如“/myPath.do“)。也支持如ant的基于路径模式(例如“/myPath/\*”)。在方法层面上,支持相对路径(例如“edit. do”)"
+
+@RequestMapping注解支持的常用属性示例如下。
+
+1. value属性
+
+@RequestMapping 是一个用来处理请求地址映射的注解，可以使用 @RequestMapping 注释一个方法或类。
+一个采用@RequestMapping注释的方法将成为一个请求处理方法，例如：
+
+.. code:: java
+
+    @RequestMapping(value="/hello")
+    public ModelAndview hello(){
+        return …;
+    }
+
+该示例使用@RequestMapping注释的value属性将URL映射到方法上。在这个例子中，将hello映射到hello方法上，
+使用如下URL访问应用时将由hello方法进行处理。
+
+.. code:: java
+
+    http://localhost:8080/context/hello
+
+由于value属性是@RequestMapping注释的默认属性，因此，如果只有唯一的属性，则可以省略属性名，
+即如下两个注解含义相同。
+
+.. code:: java
+
+    @RequestMapping(value="/hello")
+    @RequestMapping("/hello")
+
+但如果有超过一个属性，就必须写上value属性名称。
+
+value属性的值也可以是一个空字符串，此时该方法被映射到如下请求URL：
+
+.. code:: java
+
+    http://localhost:8080/context
+
+2. method属性
+
+该属性用来指示该方法仅处理哪些HTTP请求方式。
+
+.. code:: java
+
+    @RequestMapping(value="/hello", method=RequestMethod.POST)
+
+以上代码 ``method=RequestMethod.POST`` 表示该方法只支持POST请求。也可以同时支持多个HTTP请求方式。如：
+
+.. code:: java
+
+    @RequestMapping(value="/hello", method={RequestMethod.POST,RequestMethod.GET})
+
+如果没有指定method属性值，则请求处理方法可以处理任意的HTTP请求方式。
+
+.. note::
+
+    Spring 4.3 之后，新增了@GetMapping、@PostMapping、@PutMapping、@DeleteMapping、@PatchMapping 注解，
+    这几个注解可以指定的属性和@RequestMapping注解类似，区别在于@GetMapping注解只支持GET方式的请求；
+    @PostMapping注解只支持POST方式的请求；@PutMapping、@DeleteMapping、@PatchMapping分别对应PUT
+    请求、DELETE请求和PATCH请求，使用比较少。
+
+3. consumes属性
+
+该属性指定处理请求的提交内容类型（Content-Type）。
+
+.. code:: java
+
+    @RequestMapping(
+        value="/hello",
+        method=RequestMethod.POST,
+        consumes="application/json"
+    )
+
+表示方法仅处理request Content-Type为 ``application/json`` 类型的请求。
+
+4. produces属性
+
+该属性指定返回的内容类型，返回的内容类型必须是 request 请求头（Accept）中所包含的类型。
+
+.. code:: java
+
+    RequestMapping(
+        value="/hello",
+        method=RequestMethod.POST,
+        consumes="application/json",
+        produces="application/json"
+    )
+
+方法仅处理request请求中Accept头中包含了 ``application/json`` 的请求，同时指明了返回的内容类型为 ``application/json`` 。
+
+5. params属性
+
+该属性指定request中必须包含某些参数值时，才让该方法处理。
+
+.. code:: java
+
+    @RequestMapping(
+        value="/hello",
+        method=RequestMethod.POST,
+        params="myParam=myValue"
+    )
+
+方法仅处理其中名为 ``myParam`` 、值为 ``myValue`` 的请求。
+
+6.headers属性
+
+该属性指定request中必须包含某些指定的header值时，才能让该方法处理请求。
+
+.. code:: java
+
+    @RequestMapping(
+        value="/hello", 
+        method=RequestMethod.POST,
+        headers="Referer=http://www.fkit.org/"
+    )
+
+方法仅处理 header 中包含了指定 ``Referer`` 请求头和对应值为 ``http：//www.fkit.org/`` 的请求。
+
+3.2.2 请求处理方法中可出现的参数类型
++++++++++++++++++++++++++++++++++++++++
+
+每个请求处理方法可以有多个不同类型的参数。
+
+如果需要访问HttpServletRequest对象，则可以添加 ``HttpServletRequest`` 作为参数，Spring会将对象正确地传递给方法：
+
+.. code:: java
+
+    @RequestMapping(value="/login")
+    public String login(httpServletRequest request){
+        return "login";
+    }
+
+如果需要访问HttpSession对象，则可以添加HttpSession作为参数，Spring会将对象正确地传递给方法：
+
+.. code:: java
+
+    @RequestMapping(value="/login")
+    public String login(httpSession session){
+        return "login";
+    }
+
+下面是可以在请求处理方法中出现的参数类型：
+
+javax.servlet包下可以作为在请求处理方法参数的类
+
+* ``javax.servlet.ServletRequest`` 或 ``javax.servlet.http.HttpServletRequest``
+* ``javax.servlet.ServletResponse`` 或 ``javax.servlet.http.HttpServletResponse``
+* ``javax.servlet.http.HttpSession``
+* ``org.springframework.web.context.request.WebRequest`` 或
+``org.springframework.web.context.request.NativeWebRequest``
+
+java.util.Locale
+java.io.InputStream或java.io.Reader
+java.io.OutputStream或java.io.Writer
+java.security.Principal
+HttpEntity＜?＞
+java.util.Map
+org.springframework.ui.Model
+org.springframework.ui.ModelMap
+org.springframework.web.servlet.mvc.support.RedirectAttributes
+org.springframework.validation.Errors
+org.springframework.validation.BindingResult
+org.springframework.web.bind.support.SessionStatus
+org.springframework.web.util.UriComponentsBuilder
+@PathVariable、@MatrixVariable注解
+@RequestParam、@RequestHeader、@RequestBody、@RequestPart
+
+注解
+
+其中最重要的是org.springframework.ui.Model类型。这不是一个
+Servlet API类型，而是一个Spring MVC类型，其中包含了Map对象用来
+存储数据。如果方法中添加了Model参数，则每次调用请求处理方法
+时，Spring MVC都会创建Model对象，并将其作为参数传递给方法。
+还要重点说明的一个对象是
+org.springframework.web.context.request.WebRequest。WebRequest是
+Spring MVC提供的统一请求访问接口，其不仅可以访问请求相关数据，
+如参数数据、请求头数据，但访问不到Cookie区数据，而且还可以访问
+请求作用域和会话作用域中的数据；NativeWebRequest继承了
+WebRequest，并提供访问本地Servlet API的方法。
+WebRequest中有如下这些重点方法：
+getParameter（String name）。根据请求参数名获取请求参数值，等
+同于 Servlet API 的request.getParameter（String name）。
+getHeader（String name）。根据请求头参数名获取请求头参数值，
+等同于Servlet API的request.getHeader （String name）。
+setAttribute（String name，Object value，int scope）。保存数据到
+指定的作用域，等同于Servlet API的scope（request，
+session）.setAttribute（String name，Object value）方法。参数中的int
+scope是WebRequest对象中定义的两个常量SCOPE_REQUEST（请求作用域）、
+SCOPE_SESSION（会话作用域）。
+getAttribute（String name，int scope）。从指定的作用域中提取数
+据，等同于Servlet API的scope（request，session）.getAttribute（String
+name）方法。
+
+提示
+
+从框架的无侵入性来说，建议使用 WebRequest 对象替代 Servlet API 的HttpServletRequest对象和HttpSession对象。
+
+3.2.3 请求处理方法可返回的类型
++++++++++++++++++++++++++++++++++++++++
+
+每个请求处理方法可以返回以下类型的返回结果：
+
+org.springframework.web.portlet.ModelAndView
+org.springframework.ui.Model
+java.util.Map＜k,v＞
+org.springframework.web.servlet.View
+java.lang.String
+HttpEntity或ResponseEntity
+java.util.concurrent.Callable
+org.springframework.web.context.request.async.DeferredResult
+void
+
+3.2.4 Model和ModelMap
+++++++++++++++++++++++++++
+
+在请求处理方法中可出现和返回的参数类型中，最重要的就是
+Model 和 ModelAndView了。对于MVC框架，控制器（Controller）执行
+业务逻辑，用于产生模型数据（Model），而视图（View）则用于渲染
+模型数据。
+如何将模型数据传递给视图是Spring MVC框架的一项重要工作，
+Spring MVC提供了多种途径输出模型数据，如：
+Model和ModelMap
+ModelAndView
+@ModelAttribute
+@SessionAttributes
+下面将重点介绍 Model、ModelMap 以及 ModelAndView，
+@SessionAttributes 将在 3.11节中重点介绍；@ModelAttribute将在3.12节
+中重点介绍。
+Spring MVC在内部使用了一个org.springframework.ui.Model接口存
+储模型数据，它的功能类似java.util.Map接口，但是比Map易于使用。
+org.springframework.ui.ModelMap接口实现了Map接口。
+Spring MVC在调用处理方法之前会创建一个隐含的模型对象，作为
+模型数据的存储容器。如果处理方法的参数为Model或ModelMap类型，
+则Spring MVC会将隐含模型的引用传递给这些参数。在处理方法内部，
+开发者可以通过这个参数对象访问模型中的所有数据，也可以向模型中
+添加新的属性数据。
+在处理方法中，Model和ModelMap对象都可以使用如下方法添加模
+型数据：
+addAttribute (String attributeName,Object attributeValue)
+示例：Model和ModelMap的使用
+
+程序清单：
+codes/03/ModelTest/src/org/fkit/controller/ModelController
+
+在 modelTest 方法中创建了一个自定义的 User 对象，并且给
+username 属性赋值。使用Model 对象的 addAttribute（＂user＂，user）
+方法将 User 对象添加到 Model 当中，即 JSP 的requestScope当中。
+ModelMapTest方法的代码功能与此类似，只是存储对象由Model改
+成了ModelMap。
+
+3.2.5 ModelAndView
++++++++++++++++++++++++++
+
+控制器处理方法的返回值如果是ModelAndView，则其既包含模型
+数据信息，也包含视图信息，这样Spring MVC将使用包含的视图对模型
+数据进行渲染。可以简单地将模型数据看成一个Map＜String，Object＞
+对象。
+在处理方法中可以使用ModelAndView对象的如下方法添加模型数
+据：
+可以通过如下方法设置视图：
+示例：ModelAndView的使用
+
+程序清单：
+codes/03/ModelAndViewTest/src/org/fkit/controller/ModelAndViewController
+
+在ModelAndViewTest方法中创建了一个自定义的User对象，并且给
+username属性赋值。使用ModelAndView对象的addObject （＂user＂，
+user）方法将User对象添加到ModelAndView当中，即JSP的requestScope
+当中。同时调用setViewName（＂result＂）方法设置要转发的页面。
+此处需要注意的是，方法的返回值必须是 ModelAndView，方法的
+返回结果必须是ModelAndView对象，否则保存在ModelAndView对象中
+的“user”在result.jsp页面中获取不到。
+
+3.2.6 页面转发
++++++++++++++++++++
+
+在 JSP 中页面转发有两种情况：服务器内部跳转（forward）和客户端重定向（redirect）。Spring MVC选择页面转发的方式也非常简单。
+
+1.转发到JSP页面。
+若请求处理方法返回字符串，默认使用服务器内部跳转
+（forward）。示例代码如下：
+如果希望客户端重定向（redirect），在返回的字符串前面加上＂
+redirect：/＂。示例代码如下：
+若请求处理方法返回ModelAndView，使用setViewName方法设置转发的页面，默认使用服务器内部跳转（forward）。
+示例代码如下：
+若请求处理方法返回 ModelAndView，使用 setViewName 方法设置转发的页面，
+例如＂mv.setViewName（＂redirect：/main.jsp＂）；＂，
+则客户端重定向到名为main.jsp的页面。示例代码如下：
+需要注意的是，由于客户端重定向（redirect）相当于在浏览器重新发请求，所以不能访问 WEB-INF 下的资源文件，
+而且也必须写资源文件后缀名，即.jsp，因为此时springmvc-config.xml文件的视图解析器设置的前缀和后缀都将无效。
+
+2.转发到控制器的请求处理方法
+若请求处理方法返回字符串，在返回的字符串前面加上＂
+forward：/＂，例如＂forward：/main＂，则服务器内部跳转到名为main
+的请求处理方法。示例代码如下：
+若请求处理方法返回字符串，在返回的字符串前面加上＂
+redirect：/＂，例如＂redirect：/main＂，则客户端重定向到名为main的
+请求处理方法。示例代码如下：
+若请求处理方法返回ModelAndView，调用setViewName方法设置需
+要转发的控制器，例如＂mv.setViewName（＂forward：/main＂）；
+＂，则服务器内部跳转到名为main的请求处理方法。示例代码如下：
+
+若请求处理方法返回ModelAndView，调用setViewName方法设置需要转发的控制器，例如＂mv.setViewName（＂redirect：/main＂）；＂，则客户端重定向到名为main的请求处理方法。示例代码如下：
+
+3.3@RequestParam注解
+-------------------------
+
+org.springframework.web.bind.annotation.RequestParam 注解用于将指
+定的请求参数赋值给方法中的形参。
+使用@RequestParam注解可指定如表3.2所示的属性。
+表3.2@RequestParam注解支持的属性
+续表
+请求处理方法参数的可选类型为Java基本数据类型和String。示例
+代码如下：
+假设请求如下：
+以上代码会将请求中的loginname参数的值“jack”赋给loginname变
+量，password参数的值“123456”赋给password变量。
+需要注意的是，如果请求中不包含“loginname”参数，则将产生异
+常！因此，如果不能保证存在“loginname”参数，建议使用：
+@RequestParam注解还有如下写法：
+其中required参数不是必需的，默认值为true。
+示例：@RequestMapping和@RequestParam注解的使用
+新建一个项目RequestMappingTest，加入所需的jar文件，示例代码
+
+如下：
+程序清单：codes/03/RequestMappingTest/src/org/fkit/domain/User
+
+
+User是一个域对象，用来接收并封装从前台页面传递过来的数据。
+
+程序清单：
+codes/03/RequestMappingTest/src/org/fkit/controller/UserController
+
+UserController类的代码解释如下：
+（1）UserController类使用了@Controller注解，是一个控制器类。
+（2）在UserController类上面使用了@RequestMapping（value=
+＂/user＂）注解，表示该控制器处理的所有请求都被映射到user路径
+下。
+（3）本例没有使用数据库存储用户注册信息，所以定义了一个静
+态的 List 集合 userList用来代替数据库存储用户数据。
+（4）registerForm方法使用了@GetMapping（value=＂/register＂）
+注解，表示该方法映射的请求为http：//localhost：
+8080/RequestMappingTest/user/register，并且只支持GET请求。该方法返
+回字符串“registerForm”，参考 springmvc-config.xml 中的配置信息，可
+以知道该方法只是跳转到registerForm.jsp注册页面。
+（5）register 方法使用了@PostMapping（value=＂/register＂）注
+解，表示该方法映射的请求为http：//localhost：
+8080/RequestMappingTest/user/register，并且只支持 POST 请求。该方法
+使用@RequestParam注解将指定的请求参数赋值给方法中的形参，之后
+创建了一个User对象保存用户传递的注册信息，最后将User对象存储到
+userList集合中，然后登录页面就可以到userList集合中进行用户登录业
+务逻辑的判断。该方法返回字符串 loginForm，并跳转到loginForm.jsp登
+录页面。
+提示
+registerForm方法和register方法虽然映射的请求一样，但是
+registerForm方法支持的是GET请求，而register方法支持的是POST请
+求。
+（6） login 方法使用了@RequestMapping（＂/login＂）注解，表示
+该方法映射的请求为http：//localhost：
+8080/RequestMappingTest/user/login，这里没有设置method属性，表示支
+持所有方式的请求。该方法也使用@RequestParam注解将指定的请求参
+数赋值给方法中的形参。之后到集合中查找用户是否存在，此处用来模
+拟数据库验证。login方法中还有一个参数Model对象，调用该对象的
+addAttribute方法可以将数据添加到request当中。最后，如果用户登录成
+功则返回字符串 welcome，并跳转到welcome.jsp欢迎页面；登录失败则
+返回字符串 loginForm，并跳转到loginForm.jsp登录页面。
+程序清单：codes/03/RequestMappingTest/WebContent/WEBINF/
+content/registerForm.jsp
+registerForm.jsp是一个注册页面，用户可以在这里输入登录名、密
+码和真实姓名，该表单被提交到register请求。注意，这里使用的是
+POST方式，响应请求的是UserController类的register方法。
+程序清单：codes/03/RequestMappingTest/WebContent/WEBINF/
+content/loginForm.jsp
+loginForm.jsp是一个登录页面，用户可以在这里输入登录名和密
+码，该表单被提交到login请求。这里使用的是POST方式，响应请求的
+是UserController类的login方法。
+程序清单：codes/03/RequestMappingTest/WebContent/WEBINF/
+content/welcome.jsp
+welcome.jsp是一个欢迎页面，用户登录成功后跳转到该页面，该页
+面使用了EL表达式访问request当中的user对象的username属性。
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器
+DispatcherServlet，因为每次配置基本相同，此处不再赘述，读者可自行
+配置。
+同时Spring MVC还需要springmvc-config.xml配置文件，该文件内容
+和ControllerTest项目中的springmvc-config.xml文件内容一致，读者可自
+行配置。
+部署RequestMappingTest这个Web应用，在浏览器中输入如下URL
+来测试应用：
+可看到如图3.2所示的页面，表示Spring MVC 成功跳转到注册页面
+registerForm.jsp。
+输入登录名“test”，密码“123456”，真实姓名“测试用户”，单击“注
+册”按钮。请求将会被提交到UserController类的register方法进行注册，
+注册的用户信息会被保存到UserController类的userList静态集合中。若
+注册成功，将会跳转到如图3.3所示的登录页面。
+图3.2 注册页面
+图3.3 登录页面
+输入登录名“test”，密码“123456”，单击“登录”按钮。请求将会被提
+交到UserController类的login方法进行登录验证，若验证成功，将会跳转
+到如图3.4所示的欢迎页面。
+图3.4 欢迎页面
+
+3.4@PathVariable注解
+----------------------
+
+org.springframework.web.bind.annotation.PathVariable 注解可以非常方便地获得请求 URL中的动态参数。
+使用@PathVariable注解可指定如表3.3所示的属性。
+表3.3@PathVariable注解支持的属性
+@PathVariable注解示例代码如下：
+假如请求的URL为 ``http：//localhost:8080/VariableTest/pathVariableTest/1``，则自动将URL中模板变量
+{userId}绑定到通过@PathVariable注解的同名参数上，即userId变量将被赋值为1。
+
+3.5@MatrixVariable注解
+----------------------------
+
+org.springframework.web.bind.annotation.MatrixVariable注解拓展了
+URL请求地址的功能。使用@MatrixVariable 注解时多个变量可以使
+用；（分号）分隔，该注解允许开发者进行多条件组合查询。
+使用@MatrixVariable注解可指定如表3.4所示的属性。
+表3.4@MatrixVariable注解支持的属性
+@MatrixVariable注解示例代码如下：
+假如请求的 URL 为“http：//localhost：
+8080/VariableTest/matrixVariableTest/1；name=jack；age=23”，则自动将
+URL中模板变量{userId}绑定到通过@PathVariable注解的同名参数上，
+即userId变量将被赋值为1；通过@MatrixVariable注解绑定name变量和
+age变量，即name变量将被赋值为 jack，age变量将被赋值为 23。
+需要注意的是，@MatrixVariable注解功能在Spring MVC中默认是
+不启用的，启用它需要设置enable-matrix-variables=＂true＂。示例代码
+如下：
+
+3.6@CrossOrigin注解
+----------------------
+
+org.springframework.web.bind.annotation.CrossOrigin注解用于在
+Spring MVC中处理跨域请求。使用@CrossOrigin注解可指定如表3.5所
+示的属性。
+表3.5@CrossOrigin注解支持的属性
+@CrossOrigin注解示例代码如下：
+表示CrossOriginController控制器的所有方法可以处理所有域上的请
+求：
+表示CrossOriginController控制器的所有方法可以处理
+http：//www.fkit.org域上的请求：
+CrossOriginController 类上有@CrossOrigin 注解，login 方法上也有
+@CrossOrigin 注解，Spring MVC会合并两个注解的属性一起使用。
+示例：@PathVariable注解和@MatrixVariable注解的使用
+新建一个项目VariableTest，加入所需的jar文件，示例代码如下：
+
+程序清单：codes/03/VariableTest/WebContent/index.jsp
+
+程序清单：
+codes/03/VariableTest/src/org/fkit/controller/VariableController
+
+程序清单：codes/03/VariableTest/WebContent/WEBINF/springmvc-config.xml
+
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器
+DispatcherServlet，因为每次配置基本相同，此处不再赘述，读者可自行
+配置。
+部署VariableTest这个Web应用，在浏览器中输入如下URL来测试应
+用：
+会看到如图3.5所示的页面，表示Spring MVC成功跳转到index.jsp。
+图3.5 处理请求URL注解测试页面
+测试：
+（1）VariableController类的pathVariableTest方法用于测试
+@PathVariable注解，它会将请求路径“/pathVariableTest/1”中userId的
+值“1”赋给方法参数的userId变量。
+单击“测试@PathVariable注解”超链接发送请求，将调用
+pathVariableTest方法，控制台输出结果如下：
+可以看到，＜a href=＂pathVariableTest/1＂＞测试@PathVariable注
+解＜/a＞的数据1被传递到方法的变量userId并输出在控制台。
+（2）VariableController 类的 matrixVariableTest 方法用于测试
+@MatrixVariable 注解，它会将请求路径“/matrixVariableTest/1；
+name=jack；age=23”中name参数的值 “jack” 赋给方法参数的name变量，
+将age参数的值“23” 赋给方法参数的age变量。
+单击“测试@MatrixVariable注解”超链接发送请求，将调用
+matrixVariableTest方法，控制台输出结果如下：
+可以看到，＜a href=＂matrixVariableTest/1；name=jack；age=23＂＞测试@MatrixVariable注解＜/a＞的参数 name 的值“jack”被传递到方法
+的 name 变量，参数 age 的值“23”被传递到方法的age变量，并输出打印在控制台。
+（3）@MatrixVariable注解还可以完成复杂的参数注入，非常方便
+地进行多条件组合查询。本例以商品查询为例，详细介绍matrixVariable
+的使用。
+VariableController类的productTest方法用于商品条件查询，传递的
+参数包括商品、品牌和价格区间，它会将请求路
+径“/productTest/computer；brand=apple，acer；low=2000；height=10000”中brand参数的值“apple，acer”赋给方法参数的brand变
+量，该变量是一个List集合；将low参数的值“2000”赋给方法参数的low
+变量；将height参数的值“10000”赋给方法参数的height变量。该请求表
+示一个商品的条件组合查询，商品名称是computer，查询的品牌是apple和acer，价格区间是从2000到10000。
+单击“商品条件查询（品牌，价格区间）”超链接发送请求，将调用
+productTest方法，控制台输出结果如下：
+可以看到，＜a href=＂productTest/computer；brand=apple，acer；
+low=2000；height=10000＂＞商品条件查询（品牌，价格区间）＜/a＞
+的参数brand的值“apple，acer”被传递到方法的brand集合变量，参数low
+的值“2000”被传递到方法的low变量，参数height的值“10000”被传递到
+方法的height变量，并输出打印在控制台。
+示例：@CrossOrigin注解的使用
+接下来测试跨域发送请求，再新建一个项目CrossOriginTest，加入
+所需的jar文件，示例代码如下：
+程序清单：
+codes/03/CrossOriginTest/src/org/fkit/controller/CrossOriginController
+
+
+CrossOriginController类和welcome方法上都使用了@CrossOrigin注
+解。welcome方法接收到跨域请求进行简单处理后，跳转到
+welcome.jsp。
+程序清单：codes/03/CrossOriginTest/WebContent/WEBINF/
+content/welcome.jsp
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器
+DispatcherServlet，因为每次配置基本一致，此处不再赘述，读者可自行
+配置。
+同时部署VariableTest和CrossOriginTest两个Web应用，在浏览器中
+输入如下URL来测试应用：
+会看到如图3.5所示的界面，单击 ＜a href=＂http：//localhost：
+8080/CrossOriginTest/welcome＂＞测试@CrossOrigin注解＜/a＞”超链接
+发送跨域请求，请求被发送到CrossOriginTest Web应用，调用
+CrossOriginController控制器的welcome方法进行处理，控制台输出结果
+如下：
+处理跨域请求
+同时跳转到welcome.jsp页面，如图3.6所示。
+图3.6 跨域访问成功
+
+3.7@RequestHeader注解
+----------------------
+
+org.springframework.web.bind.annotation.RequestHeader注解用于将
+请求的头信息数据映射到功能处理方法的参数上。
+使用@RequestHeader注解可指定如表3.6所示的属性。
+表3.6@RequestHeader注解支持的属性
+@RequestHeader注解示例代码如下：
+以上配置自动将请求头“User-Agent”的值赋到userAgent变量上，并
+将请求头“Accept”的值赋到accepts变量上。
+示例：@RequestHeader注解的使用
+新建一个项目RequestHeaderTest，加入所需的jar文件，示例代码如
+下。
+程序清单：
+codes/03/RequestHeaderTest/src/org/fkit/controller/RequestHeaderController
+在 requestHeaderTest 方法中使用@RequestHeader 注解获取请求
+头“User-Agent”的值并赋给userAgent变量，获取请求头“Accept”的值并
+赋给accepts变量。
+程序清单：codes/03/RequestHeaderTest/WebContent/index.jsp
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器
+DispatcherServlet，因为每次配置基本一致，此处不再赘述，读者可自行
+配置。
+部署RequestHeaderTest这个Web应用，在浏览器中输入如下URL来
+测试应用：
+会看到如图3.7所示的页面，表示Spring MVC成功跳转到index.jsp。
+图3.7 测试@RequestHeader注解页面
+单击 测试@RequestHeader注解”超链接发送请求，将调用
+requestHeaderTest方法，控制台输出结果如下：
+可以看到，请求头 User-Agent 的值赋给了userAgent变量，请求头
+Accept 的值赋给了accepts变量，并输出打印在控制台。读者请注意，不
+同的浏览器请求头数据略有不同。
+
+3.8@CookieValue注解
+----------------------
+
+org.springframework.web.bind.annotation.CookieValue 注解用于将请
+求的 Cookie 数据映射到功能处理方法的参数上。
+使用@CookieValue注解可指定如表3.7所示的属性。
+表3.7@CookieValue注解支持的属性
+@CookieValue注解示例代码如下：
+以上配置会自动将Cookie中JSESSIONID的值设置到sessionId参数
+上，defaultValue表示Cookie中没有JSESSIONID时默认为空。
+示例：@CookieValue注解的使用
+新建一个项目CookieValueTest，加入所需的jar文件，示例代码如
+下。
+程序清单：
+codes/03/CookieValueTest/src/org/fkit/controller/CookieValueController
+cookieValueTest（@CookieValue（value=＂JSESSIONID＂，
+defaultValue=＂＂） String sessionId）方法会自动将Cookie中
+JSESSIONID的值入参到sessionId参数上，defaultValue表示Cookie中没
+有JSESSIONID时默认为空。
+程序清单：codes/03/CookieValueTest/WebContent/index.jsp
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器
+DispatcherServlet，因为每次配置基本一致，此处不再赘述，读者可自行
+配置。
+同时Spring MVC还需要springmvc-config.xml配置文件，该文件内容
+和ControllerTest项目中的springmvc-config.xml文件一致，读者可自行配
+置。
+部署CookieValueTest这个Web应用，在浏览器中输入如下URL来测
+试应用：
+会看到如图3.8所示的页面，表示Spring MVC成功跳转到初始页面
+index.jsp。
+单击“测试@CookieValue注解”超链接发送请求，将调用
+cookieValueTest方法，控制台输出结果如下：
+图3.8 测试@CookieValue注解页面
+可以看到，请求中sessionId的值被传递到方法的sessionId变量并输
+出打印在控制台。
+
+3.9@RequestAttribute注解
+---------------------------
+
+org.springframework.web.bind.annotation.RequestAttribute 注解用于
+访问由请求处理方法、过滤器或拦截器创建的、预先存在于request作用
+域中的属性，将该属性转换到目标方法的参数。
+使用@RequestAttribute注解可指定如表3.8所示的属性。
+表3.8@RequestAttribute注解支持的属性
+@RequestAttribute注解示例代码如下：
+以上代码会自动将request作用域中名为username的属性的值设置到
+username参数上。
+
+3.10@SessionAttribute注解
+------------------------------
+
+org.springframework.web.bind.annotation.SessionAttribute 注解用于访
+问由请求处理方法、过滤器或拦截器创建的、预先存在于session作用域中的属性，将该属性转换到目标方法的参数。
+使用@SessionAttribute注解可指定如表3.9所示的属性。
+表3.9@SessionAttribute注解支持的属性
+
+@SessionAttribute注解示例代码如下：
+以上代码会自动将session作用域中名为username的属性的值设置到username参数上。
+示例：@RequestAttribute注解和@SessionAttribute注解的使用
+新建一个项目AttributeTest，加入所需的jar文件，示例代码如下：
+程序清单：codes/03/AttributeTest/WebContent/index.jsp
+程序清单：
+codes/03/AttributeTest/src/org/fkit/controller/AttributeController
+
+attributeTest方法处理请求后重定向到main请求，main请求会被自定
+义过滤器拦截，在过滤器中会分别设置两个属性到 request 作用域和
+session 作用域。在 main 方法中使用@RequestAttribute和
+@SessionAttribute进行赋值。
+程序清单：
+codes/03/AttributeTest/src/org/fkit/filter/TestAttributeFilter
+
+TestAttributeFilter过滤器拦截“main”请求，在doFilter方法中分别设
+置两个属性到request作用域和session作用域。
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器
+DispatcherServlet，因为每次配置基本一致，此处不再赘述，读者可自行
+配置。
+同时Spring MVC还需要springmvc-config.xml配置文件，该文件内容
+和ControllerTest项目中的springmvc-config.xml文件一致，读者可自行配
+置。
+部署AttributeTest这个Web应用，在浏览器中输入如下URL来测试
+应用：
+会看到如图3.9所示的页面，表示Spring MVC成功跳转到初始页面
+index.jsp。
+图3.9 测试@RequestAttribut和@SessionAttribute注解页面
+单击 测试@RequestAttribut和@SessionAttribute”超链接发送请求，
+将调用attributeTest方法，经过过滤器，重定向到main方法，控制台输出
+结果如下：
+可以看到，request作用域中的school的值被传递到方法的school变
+量，session作用域中的author的值被传递到方法的author变量，并输出打
+印在控制台。
+
+3.11@SessionAttributes注解
+--------------------------------
+
+org.springframework.web.bind.annotation.SessionAttributes 注解允许
+我们有选择地指定Model中的哪些属性转存到 HttpSession对象当中。
+使用@SessionAttributes注解可指定如表3.10所示的属性。
+表3.10@SessionAttributes注解支持的属性
+@SessionAttributes注释只能声明在类上，而不能声明在方法上。
+示例：@SessionAttributes注解的使用
+程序清单：
+codes/03/SessionAttributesTest/src/org/fkit/controller/SessionAttributesController
+login方法中使用的User对象和3.3节中RequestMappingTest项目中的
+User对象一致，读者可以自行参考，此处不再赘述。
+接下来创建一个登录页面index.jsp。
+程序清单：codes/03/SessionAttributesTest/WebContent/index.jsp
+最后创建一个查看作用域中属性数据的页面welcome.jsp。
+程序清单：codes/03/SessionAttributesTes/WebContent/WEBINF/
+content/welcome.jsp
+在浏览器中输入如下URL来测试应用：
+会看到如图3.10所示的界面。
+图3.10 测试@SessionAttributes注解页面
+输入登录名“test”，密码“123456”，单击“登录”按钮。请求将会被提
+交到SessionAttributesController类的login方法，该方法将会创建User对象
+来保存数据，并将其设置到 Model 当中。因为类上面使用了
+@SessionAttributes 注解，所以 User 同时也会被设置到HttpSession作用
+域当中。方法执行完跳转到如图3.11所示的欢迎界面。
+图3.11@SessionAttributes注解测试结果
+可以看到，User对象被成功设置到HttpSession作用域当中。
+@SessionAttributes还有如下写法：
+还可以设置多个对象到HttpSession当中：
+types属性用来指定放入HttpSession当中的对象类型。
+
+3.12@ModelAttribute注解
+----------------------------
+
+org.springframework.web.bind.annotation.ModelAttribute注解用于将
+请求参数绑定到对象。
+@ModelAttribute注解只支持一个属性value，类型为String，表示绑
+定的属性名称。
+提示
+被@ModelAttribute 注释的方法会在 Controller 每个方法执行前被执
+行，因此在一个Controller被映射到多个URL时，要谨慎使用。
+@ModelAttribute注解的使用方式有很多种，下面为读者逐一介绍。
+示例：@ModelAttribute注解的使用
+程序清单：codes/03/ModelAttributeTest/WebContent/index.jsp
+程序清单：
+codes/03/ModelAttributeTest/src/org/fkit/controller/FormController
+1.测试@ModelAttribute（value=＂＂）注释返回具体类的方法
+程序清单：codes/03/ModelAttributeTest/WebContent/WEBINF/
+content/loginForm1.jsp
+程序清单：
+codes/03/ModelAttributeTest/src/org/fkit/controller/ModelAttribute1Controller
+在ModelAttribute1Controller类中除了@RequestMapping映射的login1
+方法之外，还提供了一个 userModel1 方法，该方法上有一个
+@ModelAttribute 注解。此处@ModelAttribute 注解默认的value值
+为“loginname”，用来指定model属性的名称，而model属性的值就是
+userModel1方法的返回值。被@ModelAttribute注解的userModel1方法会
+先于login1调用，它把请求参数loginname的值赋给loginname变量，并设
+置了一个属性loginname到Model当中，而属性的值就是loginame变量的
+值。
+程序清单：codes/03/ModelAttributeTest/WebContent/WEBINF/
+content/result1.jsp
+在跳转的result1.jsp中可以访问到由@ModelAttribute设置的
+loginname的值。
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器
+DispatcherServlet。因为每次配置基本一致，此处不再赘述，读者可自行
+配置。
+同时，Spring MVC还需要springmvc-config.xml配置文件，该文件内
+容和ControllerTest项目中的springmvc-config.xml文件一致，读者可自行
+配置。
+部署ModelAttributeTest这个Web应用，在浏览器中输入如下URL来
+测试应用：
+会看到如图3.12所示的页面，表示Spring MVC成功跳转到初始页面
+index.jsp。
+图3.12 测试@ModelAttribute注解页面
+单击“测试@ModelAttribute（value=＂＂）注释返回具体类的方
+法”超链接发送请求，跳转到loginForm1.jsp页面，如图3.13所示。
+图3.13 测试@ModelAttribute（value=＂＂）页面
+输入登录名“test”，单击“登录”按钮发送请求，而后将先调用
+userModel1 方法，再调用login1方法，并跳转到result1.jsp页面，如图
+3.14所示。
+图3.14 测试@ModelAttribute（value=＂＂）结果页面
+可以看到，在request作用域中访问到了Model的值。
+2.测试@ModelAttribute注释void返回值的方法
+程序清单：codes/03/ModelAttributeTest/WebContent/WEBINF/content/loginForm2.jsp
+
+程序清单：
+codes/03/ModelAttributeTest/src/org/fkit/controller/ModelAttribute2Controller
+
+在ModelAttribute2Controller类中除了@RequestMapping映射的login2
+方法之外，还提供了一个userModel2方法，该方法上有一个
+@ModelAttribute注解。userModel2方法会先于login2方法被调用，它把
+请求参数值赋给对应变量，model属性名称和值由
+model.addAttribute（）方法实现，前提是要在方法中加入一个Model类
+型的参数。
+程序清单：codes/03/ModelAttributeTest/WebContent/WEBINF/
+content/result2.jsp
+在跳转的 result2.jsp 中可以访问到由@ModelAttribute 注解设置的
+loginname 和 password的值。
+在浏览器中输入如下URL来测试应用：http：//localhost：
+8080/ModelAttributeTest/index.jsp，将会跳转到如图3.12 所示页面，单
+击“测试@ModelAttribute注释void返回值的方法”超链接发送请求，将会
+跳转到loginForm2.jsp页面，如图3.15所示。
+图3.15 测试@ModelAttribute注释void返回值的方法
+输入登录名“test”，密码“123456”，单击“登录”按钮发送请求，而后
+将先调用userModel2方法，再调用login2方法，并跳转到result2.jsp页
+面，如图3.16所示。
+图3.16 测试@ModelAttribute注释void返回值的方法结果
+可以看到，在request作用域中访问到了Model的值。
+3.测试@ModelAttribute注释返回具体类的方法
+程序清单：codes/03/ModelAttributeTest/WebContent/WEBINF/
+content/loginForm3.jsp
+loginForm3.jsp和loginForm2.jsp页面内容一致，读者可自行参考，
+此处不再赘述。
+程序清单：
+codes/03/ModelAttributeTest/src/org/fkit/controller/ModelAttribute3Controller
+
+在ModelAttribute3Controller类中除了@RequestMapping映射的login3
+方法之外，还提供了一个userModel3方法，该方法上有一个
+@ModelAttribute注解。userModel3方法会先于login3方法被调用，这里
+model属性的名称没有被指定，它由@ModelAttribute注解的userModel3
+方法的返回类型隐含表示，如这个方法返回User类型，那么这个model
+属性的名称就是user。此处find（loginname，password）方法用来模拟
+数据库根据登录名和密码查询用户的功能实现。
+程序清单：codes/03/ModelAttributeTest/WebContent/WEBINF/
+content/result3.jsp
+在跳转的 result2.jsp 页面中可以访问到由@ModelAttribute 设置的
+loginname 和 password的值。
+在浏览器中输入如下URL来测试应用：http：//localhost：
+8080/ModelAttributeTest/index.jsp，跳转到如图3.12所示页面，单击“测
+试@ModelAttribute注释返回具体类的方法”超链接发送请求，将跳转到
+loginForm3.jsp页面，如图3.15所示，输入登录名“test”，密码“123456”，
+单击“登录”按钮发送请求，而后将先调用userModel3方法，再调用
+login3方法，并跳转到result3.jsp页面，如图3.17所示。
+图3.17 测试@ModelAttribute注释返回具体类的方法结果
+可以看到，在request作用域中访问到了User对象。
+4.测试@ModelAttribute和@RequestMapping同时注释一个方法
+程序清单：codes/03/ModelAttributeTest/WebContent/WEBINF/
+content/loginForm4.jsp
+loginForm4.jsp和loginForm2.jsp页面内容一致，读者可自行参考，
+此处不再赘述。
+
+程序清单：
+codes/03/ModelAttributeTest/src/org/fkit/controller/ModelAttribute4Controller
+
+在ModelAttribute4Controller中，@ModelAttribute和
+@RequestMapping同时注释一个方法，此时 login4 方法的返回值并不是
+一个视图名称，而是 model 属性的值，视图名称是@RequestMapping的
+value值“/login4”。Model的属性名称由@ModelAttribute的value值指定，
+这相当于在request中封装了username（key）=admin（value）。
+注意，此处login4方法跳转的结果是“/login4”。
+
+程序清单：codes/03/ModelAttributeTest/WebContent/WEBINF/content/login4.jsp
+
+在浏览器中输入如下URL来测试应用：http：//localhost：
+8080/ModelAttributeTest/index.jsp，跳转到如图3.12所示页面，单击“测
+试@ModelAttribute和@RequestMapping同时注释一个方法”超链接发送
+请求，而后跳转到loginForm4.jsp页面，如图3.15所示。输入登录
+名“test”，密码“123456”，单击“登录”按钮发送请求，将调用 login4 方
+法，跳转到 login4.jsp 页面，如图3.18所示。
+图3.18 测试@ModelAttribute和@RequestMapping同时注释一个方法结果
+可以看到，在 request 作用域中访问到了 username 的值，也就是
+login4 方法的返回值“admin”。
+5.测试@ModelAttribute注释一个方法的参数
+程序清单：codes/03/ModelAttributeTest/WebContent/WEBINF/
+content/loginForm5.jsp
+loginForm5.jsp和loginForm2.jsp页面内容一致，读者可自行参考，
+此处不再赘述。
+程序清单：
+codes/03/ModelAttributeTest/src/org/fkit/controller/ModelAttribute5Controller
+ModelAttribute5Controller类中login5方法的参数User使用了
+@ModelAttribute注解，前台页面的控件的值会自动入参到
+@ModelAttribute 注解修饰的对象的同名属性当中。这种方式是在实际
+开发中使用最多的方式。
+程序清单：codes/03/ModelAttributeTest/WebContent/WEBINF/
+content/result5.jsp
+在浏览器中输入如下URL来测试应用：http：//localhost：
+8080/ModelAttributeTest/index.jsp，跳转到如图3.12 所示页面，单击 测
+试@ModelAttribute注释一个方法的参数 超链接发送请求，跳转到
+loginForm5.jsp页面，如图3.15所示。输入登录名 test，密码 123456，单
+击登录 按钮发送请求，而后将调用login5方法，跳转到result5.jsp页面，
+如图3.19所示。
+图3.19 测试@ModelAttribute注释一个方法的参数
+可以看到，在request作用域中访问到了User对象。
+提示
+@ModelAttribute 注解的使用方法有很多种，非常灵活，读者可以
+根据业务需求选择使用。
+
+3.13@RequestBody注解
+----------------------
+
+org.springframework.web.bind.annotation.RequestBody注解常用来处
+理Content-Type：不是application/x-www-form-urlencoded 编码的内容，
+例如 application/json、application/xml 等。@RequestBody注解通过使用
+HandlerAdapter 配置的 HttpMessageConverters 来解析 JSON 或XML数
+据，然后绑定到相应的Bean上。
+
+3.13.1 HttpMessageConverter＜T＞接口
+++++++++++++++++++++++++++++++++++++++++++++
+
+HttpMessageConverter＜T＞是Spring 3.0之后新增的一个重要接口，
+它负责将请求信息转换为一个对象（类型为T），并将对象（类型为
+T）绑定到请求方法的参数上或输出为响应信息。
+DispatcherServlet默认已经装配了RequestMappingHandlerAdapter作
+为HandlerAdapter组件的实现类，即HttpMessageConverter由
+RequestMappingHandlerAdapter使用，将请求信息转换为对象，或将对
+象转换为响应信息。
+HttpMessageConverter＜T＞接口中定义了以下几个方法：
+boolean canRead（Class＜？＞clazz，MediaType mediaType）。
+该方法指定转换器可以读取的对象类型，即转换器可将请求信息转换为
+clazz 类型的对象，同时指定支持的MIME类型（text/html、
+application/json等）。MIME媒体类型在RFC2616中定义，具体请参考
+http：//tools.ietf.org/html/rfc2616＃section-3.7上的说明。
+boolean canWrite（Class＜？＞clazz，MediaType mediaType）。
+该方法指定转换器可以将clazz类型的对象写到响应流当中，响应流支持
+的媒体类型在mediaType中定义。
+List＜MediaType＞getSupportedMediaTypes（）。 该方法返回当
+前转换器支持的媒体类型。
+T read（Class＜？extends T＞clazz，HttpInputMessage
+inputMessage）。 该方法将请求信息流转换为T类型的对象。
+void write（T t，MediaType contentType，HttpOutputMessage
+outputMessage）。 该方法将T类型的对象写到响应流当中，同时指定
+响应的媒体类型为contentType。
+Spring为HttpMessageConverter＜T＞提供了多个实现类，这些实现
+类组成了一个功能强大、用途广泛的信息转换家族。详细说明如下：
+StringHttpMessageConverter。 将请求信息转换为字符串。泛型T
+为String类型，可以读取所有媒体类型（*/*）的请求信息，可通过设置
+supportedMediaTypes 属性指定媒体类型。响应信息的媒体类型为
+text/plain（即Content-Type的值）。
+FormHttpMessageConverter。 将表单数据读取到 MultiValueMap
+中。泛型 T 为org.springframework.util.MultiValueMap＜String，？＞类
+型，支持读取 application/x-www-form-urlencoded 类型的信息，但不支
+持读取 multipart/form-data 类型的信息。可以写application/x-www-formurlencoded
+及multipart/form-data类型的响应信息。
+SourceHttpMessageConverter。 如果部分表单属性是XML数据，
+则可用该转换器进行转换。
+ResourceHttpMessageConverter。 读写
+org.springframework.core.io.Resource对象。泛型T为
+org.springframework.core.io.Resource对象，可以读取所有媒体类型
+（*/*）的请求信息。如果类路径下提供了JAF（Java Activation
+Framework），则根据Resource的类型指定响应的类型，否则响应的类
+型为application/octet-stream。
+BufferedImageHttpMessageConverter。 读写BufferedImage对象。
+泛型T为BufferedImage对象，可以读取所有类型（*/*）的请求信息，返
+回 BufferedImage 相应的类型，也可以通过contentType显式指定。
+ByteArrayHttpMessageConverter。 读写二进制数据。泛型T为
+byte[]类型，可以读取所有类型（*/*）的请求信息，可以通过设置
+supportMediaTypes 属性指定类型，响应信息的媒体类型为
+application/octet-stream。
+SourceHttpMessageConverter。 读写javax.xml.transform.Source类
+型的数据。泛型T为javax.xml.transform.Source类型及其扩展类型，包括
+javax.xml.transform.dom.DOMSource、
+javax.xml.transform.sax.SAXSource及
+javax.xml.transform.stream.StreamSource，可以读取text/xml和
+application/xml类型请求，响应信息的类型为text/xml和application/xml。
+MarshallingHttpMessageConverter。 通过Spring的
+org.springframework.oxm.Marshalling（将Java对象转换成XML）和
+Unmarshaller（将XML解析为Java对象）读写XML消息。泛型T为Object
+类型，可以读取text/xml和application/xml类型请求，响应信息的类型为
+text/xml和application/xml。
+Jaxb2RootElementHttpMessageConverter。 通过JAXB2读写XML
+消息，将请求消息转换到注解@XmlRootElement和XmlType作用的类
+中。泛型T为Object类型，可以读取text/xml和application/xml类型请求，
+响应信息的类型为text/xml和application/xml。
+MappingJackson2HttpMessageConverter。 利用Jackson开源类包
+读写JSON数据。泛型 T 为 Object 类型，可以读取 application/json 类型
+的数据，响应信息的类型为application/json。
+RssChannelHttpMessageConverter。 能够读写 RSS 种子消息。泛
+型 T 为 com.sun.syndication.feed.rss.Channel类型，可以读取
+application/rss+xml类型的数据，响应信息的类型为application/rss+xml。
+AtomFeedHttpMessageConverter。 能够读写 RSS 种子消息。泛型
+T 为 com.sun.syndication.feed.atom.Feed类型，可以读取
+application/atom+xml类型的数据，响应信息的类型为
+application/atom+xml。
+RequestMappingHandlerAdapter默认已经装配了以下的
+HttpMessageConverter：
+StringHttpMessageConverter
+ByteArrayHttpMessageConverter
+SourceHttpMessageConverter
+如果需要装配其他类型的HttpMessageConverter，则可以在Spring的
+Web容器的上下文中自定义一个RequestMappingHandlerAdapter，如下所示：
+
+提示
+
+如果在Spring Web容器中显式定义了一个
+RequestMappingHandlerAdapter，则Spring MVC 的
+RequestMappingHandlerAdapter 默认装配的 HttpMessageConverter将不再
+起作用。
+
+3.13.2 转换JSON数据
+++++++++++++++++++++++++
+
+Spring MVC提供了处理JSON格式请求/响应的
+HttpMessageConverter：
+MappingJackson2HttpMessageConverter。 利用Jackson开源类包
+处理JSON格式的请求或响应信息。
+因此只需要在Spring Web容器中为RequestMappingHandlerAdapter装
+配处理JSON的HttpMessageConverter，并在交互过程中通过请求的
+Accept指定MIME类型，Spring MVC就可以使服务端的处理方法和客户
+端JSON格式的消息进行通信了，开发者几乎不用关心通信层数据格式
+的问题，可以将精力集中到业务处理上面。
+org.springframework.web.bind.annotation.RequestBody注解用于读取
+Request请求的body部分数据，使用系统默认配置的
+HttpMessageConverter 进行解析，然后把相应的数据绑定到Controller中
+方法的参数上。
+当前台页面使用 GET 或 POST 方式提交数据时，数据编码格式由
+请求头的 ContentType指定。可以分为以下几种情况：
+application/x-www-form-urlencoded。 这种情况的数据
+@RequestParam、@ModelAttribute也可以处理，并且很方便，当然
+@RequestBody也能处理。
+multipart/form-data。 @RequestBody不能处理这种格式的数据。
+application/json、application/xml等格式的数据。 必须使用
+@RequestBody来处理。
+在实际开发工作中使用@RequestBody注解可以很方便地接收JSON
+格式的数据，并将其转换成对应的数据类型。
+Spring的官方文档说明，Spring MVC默认使用
+MappingJackson2HttpMessageConverter转换JSON格式的数据，Spring默
+认使用Jackson开源框架作为JSON解析框架。Jackson开源框架可以非常
+轻松地将Java对象转换成json对象和xml文档，同样也可以将json对象、
+xml文档转换成Java对象。
+本书成书时 Jackson 开源框架的最新版本是 2.9.2，jar 包共有 3
+个：jackson-annotations-2.9.2.jar、jackson-core-2.9.2.jar、jacksondatabind-
+2.9.2.jar。最新下载地址为：
+http：//mvnrepository.com/artifact/com.fasterxml.jackson.core，建议读者
+下载该版本或者更高版本进行测试。
+示例：@RequestBody接收JSON格式的数据
+创建一个RequestBodyTest项目，在WebContent目录下创建一个js目
+录，加入jQuery和json2的js文件，在WEB-INF/lib目录中加入Jackson的
+jar文件。
+程序清单：codes/03/RequestBodyTest/WebContent/index.jsp
+
+index.jsp页面代码分析如下：
+（1）页面使用jQuery发送JSON数据，在页面的＜head＞部分，引
+入了jQuery和json2的js文件。
+（2）页面载入时调用testRequestBody函数。
+（3） testRequestBody 函数发送异步请求
+到“json/testRequestBody”，注意加粗的代码contentType：＂
+application/json＂，其表示发送的内容编码格式为JSON；data：
+JSON.stringify（{id：1，name：＂Spring MyBatis企业应用实战＂}），
+表示发送一个JSON数据；请求成功将返回一个JSON数据，接到返回的
+数据后将数据设置到页面的＜span＞当中。
+程序清单：
+codes/03/RequestBodyTest/src/org/fkit/controller/BookController
+setJson 方法中的第一个参数@RequestBody Book book 表示，使用
+@RequestBody 注解获取JSON 数据后，将 JSON 数据设置到对应的
+Book 对象的属性当中。第二个参数是HttpServletResponse对象，用来输
+出响应数据到客户端。
+向前台JSP页面的JSON数据中传入了id和name，为了测试接收数
+据，使用logger.info （mapper.writeValueAsString（book））；代码将接
+收到的JSON数据中的book对象打印在控制台上。为了测试传递数据到
+JSP页面，在该方法中还给book对象的author对象设置了一个值，并将其
+写出到客户端。
+程序清单：codes/03/RequestBodyTest/src/org/fkit/domain/Book
+在Book类中定义了3个属性：id、name和author，用于接收向JSP页
+面传入的JSON数据。toString方法用来输出获取的数据对象信息。
+程序清单：codes/03/RequestBodyTest/WebContent/WEBINF/
+springmvc-config.xml
+提示
+在引入静态文件，例如js时，需要加入＜mvc：default-servlethandler/＞
+从而使用默认的Servlet来响应静态文件。如果没有加入该配
+置，则执行时页面会报404错误，而控制台会提出警告：
+No mapping found for HTTP request with URI
+[/ResponseBodyTest/js/jquery-1.11.0.min.js] in DispatcherServlet with
+name'springmvc'
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器
+DispatcherServlet，因为每次配置基本一致，此处不再赘述，读者可自行
+配置。
+部署RequestBodyTest这个Web应用，在浏览器中输入如下URL来测
+试应用：
+载入index.jsp页面时会发送Ajax请求，传递JSON数据，
+BookController接收到请求后，@RequestBody注解会将JSON数据设置到
+Book参数对应的属性当中。控制台输出如下：
+可以看到，JSON数据传递的id和name被赋值到Book对象的属性
+中。接下来，setJson方法给Book对象的author属性设置了值，并将Book
+对象转换成JSON写出到客户端。
+请求响应如图3.20所示，表示Spring MVC成功将JSON数据写出到
+客户端。
+图3.20 Spring MVC接收JSON数据
+可以看到，Book对象被以JSON格式成功写回客户端。
+示例：自定义HttpMessageConverter接收JSON格式的数据
+Spring默认使用Jackson处理JSON数据。在实际开发中，开发者也
+可以选择使用其他开源框架处理 JSON 数据。那么，如果使用其他的开
+源框架处理 JSON 数据，该如何配置HttpMessageConverter呢？接下来，
+我们就使用在业界非常受欢迎的Fastjson来接收JSON数据。
+本书成书时Fastjson开源框架的最新版本是1.2.9，jar包只有1个：
+fastjson-1.2.9.jar。最新下载地址为：
+http：//mvnrepository.com/artifact/com.alibaba/fastjson，建议读者下载该
+版本或者更高版本进行测试。
+创建一个FastjsonTest项目，在WebContent目录下创建一个js目录，
+加入jQuery和json2的js文件，在WEB-INF/lib目录中加入Fastjson的jar文
+件。
+程序清单：
+codes/03/FastjsonTest/src/org/fkit/controller/BookController
+程序清单：codes/03/FastjsonTest/WebContent/WEBINF/
+springmvc-config.xml
+以上配置文件和之前的配置文件主要的区别在于，之前使用的是
+Spring中默认的Mapping-Jackson2HttpMessageConverter，这样只需要配
+置默认的＜mvc：annotation-driven/＞就可以了。而现在使用第三方的开
+源框架Fastjson处理JSON数据，则需要另行配置HttpMessageConverter。
+＜mvc：message-converters register-defaults=＂false＂＞设置不使用
+默认的消息转换器。在Spring的官方文档中有一段这样的话：
+The MappingJackson2JsonView uses the Jackson library's
+ObjectMapper to render the response content as JSON.
+这段话的意思是，Spring MVC默认使用 MappingJackson2JsonView
+转换器，所以必须加入Jackson这个库的第三方类文件。而在实际开发
+中，更加受欢迎的是Fastjson，所以本例并没有使用 Jackson，而是使用
+了 Fastjson，则转换器需要配置成
+com.alibaba.fastjson.support.spring.FastJsonHttpMessageConverter类型，
+FastJsonHttpMessageConverter是Fastjson中实现了HttpMessageConverter
+接口的类。
+提示
+如果加入了Fastjson相关jar文件，但是没有配置
+FastJsonHttpMessageConverter转换器，则在发送请求时后台会提示错
+误：
+Handler execution resulted in exception:Content
+type'application/json;charset=UTF-8'not supported
+此外，其他JSP和Java文件和之前项目的一致，并且还需要在
+web.xml文件中配置Spring MVC的前端控制器DispatcherServlet，因为每
+次配置基本一致，此处不再赘述，读者可自行配置。
+部署FastjsonTest这个Web应用，在浏览器中输入如下URL来测试应
+用：
+测试结果如图3.20所示，由此可知，处理JSON格式的开源框架使用 Jackson和Fastjson，只是需要使用不同的HttpMessageConverter。
+
+3.14@ResponseBody注解
+------------------------
+
+org.springframework.web.bind.annotation.ResponseBody 注解用于将
+Controller 的请求处理方法返回的对象，通过适当的
+HttpMessageConverter转换为指定格式后，写入到Response对象的body数
+据区。当返回的数据不是HTML标签的页面，而是其他某种格式的数据
+时（如JSON、XML等）使用它。
+示例：@ResponseBody返回JSON格式的数据
+创建一个ResponseBodyTest项目，在WebContent目录下创建一个js
+目录，加入jQuery和json2的js文件，在WEB-INF/lib目录中加入Jackson
+的jar文件。
+程序清单：
+codes/03/ResponseBodyTest/src/org/fkit/controller/BookController
+getJson方法会将List集合数据转换成JSON格式，然后将其返回到客
+户端。
+程序清单：codes/03/ResponseBodyTest/WebContent/index.jsp
+
+index.jsp页面代码分析如下：
+（1）页面使用jQuery发送请求，在页面的＜head＞部分，引入了
+jQuery和json2的js文件。
+（2）载入页面时调用testResponseBody函数。
+（3）testResponseBody函数发送异步请求
+到“json/testRequestBody”，请求成功将返回一个JSON 数据，该数据包
+含多个书籍信息。接到返回的数据后使用 jQuery 将数据设置到页面的
+＜table＞表单中。
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器
+DispatcherServlet，因为每次配置基本一致，此处不再赘述，读者可自行
+配置。
+同时Spring MVC还需要springmvc-config.xml配置文件，该文件内容
+和RequestBodyTest项目中的springmvc-config.xml文件一致，读者可自行
+配置。
+部署ResponseBodyTest这个Web应用，在浏览器中输入如下URL来
+测试应用：
+载入index.jsp页面时会发送Ajax请求，getJson方法创建多个Book对
+象并将其封装到List集合中返回，方法上的@ResponseBody 注解会将集
+合数据转换为 JSON 格式数据并将其返回客户端。
+请求响应如图3.21所示，这表示Spring MVC成功将JSON数据写到了客户端。
+图3.21 Spring MVC返回JSON数据
+
+可以看到，包含Book对象的集合数据被转换成JSON格式并被成功写回客户端。
+示例：自定义HttpMessageConverter返回JSON格式的数据
+
+接下来，使用Fastjson来返回JSON数据。
+创建一个Fastjson2Test项目，在WebContent目录下创建一个js目
+录，加入jQuery和json2的js文件，在WEB-INF/lib目录中加入Fastjson的
+jar文件。
+JsonResponse2Test项目的所有JSP和Java文件和JsonResponseTest一
+致，只是在springmvc-config.xml中使用了Fastjson的
+FastJsonHttpMessageConverter。读者可参考配套资源文件中对应的代
+码，测试结果和ResponseBodyTest项目一致，此处不再赘述。
+
+3.15 转换XML数据
+--------------------
+
+Spring MVC提供了处理XML格式请求/响应的
+HttpMessageConverter，如Jaxb2RootElement-HttpMessageConverter通过
+JAXB2读写XML消息，并将请求消息转换到注解@XmlRootElement和
+@XmlType作用的类中。
+因此只需要在 Spring Web 容器中为 RequestMappingHandlerAdapter
+装配处理 XML 的HttpMessageConverter，并在交互过程中通过请求的
+Accept指定MIME类型，Spring MVC就可以使服务端的处理方法和客户
+端XML格式的消息进行通信了。开发者几乎不用关心通信层数据格式
+的问题，可以将精力集中到业务处理上面。
+在 Spring 的官方文档说明中，Spring MVC 默认使用
+Jaxb2RootElementHttpMessage-Converter转换XML格式的数据，
+JAXB（Java Architecture for XML Binding）可以很方便地生成XML格式
+数据，也能够很方便地生成JSON格式数据，这样一来可以更好地在
+XML和JSON之间进行转换。
+JAXB是一个业界的标准，是一项可以根据XML Schema产生Java类
+的技术。在该过程中，JAXB提供了将XML实例文档反向生成Java对象
+的方法，并能将Java对象的内容重新写到XML实例文档中，从而使得
+Java开发者在Java应用程序中能够很方便地处理XML数据。
+JAXB常用的注解包括：@XmlRootElement、@XmlElement，等等。
+示例：接收XML格式的数据
+创建一个XmlTest项目，在WebContent目录下创建一个js目录，加
+入jQuery和json2的js文件。
+程序清单：codes/03/XmlTest/WebContent/sendxml.jsp
+sendxml.jsp页面代码分析如下：
+（1）页面使用jQuery发送JSON数据，在页面的＜head＞部分，引
+入了jQuery和json2的js文件。
+（2）载入页面时调用sendxml函数。
+（3）sendxml函数发送异步请求到“sendxml”，注意加粗的代码：
+contentType：＂application/xml＂，其表示发送的内容编码格式为
+XML；data表示发送一个XML数据。
+程序清单：codes/03/XmlTest/src/org/fkit/domain/Book
+在Book类中定义了3个属性：id、name和author，分别对应XML的
+元素。toString方法用来输出获取的数据对象信息。
+程序清单：codes/03/XmlTest/src/org/fkit/controller/BookController
+sendxml方法中的第一个参数@RequestBody Book book表示，使用
+@RequestBody注解获取到XML数据后，将XML数据设置到对应的Book
+对象的属性中。为了测试接收数据，使用“logger.info（book）；”代码
+将接收到的XML数据的Book对象打印在控制台上。
+springmvc-config.xml 文件和 JsonRequestTest 项目的一致，重点在
+于＜mvc：annotation-driven/＞，该配置默认装配了
+Jaxb2RootElementHttpMessageConverter来处理XML数据的转换。
+此外，还需要在web.xml文件中配置Spring MVC的前端控制器
+DispatcherServlet，因为每次配置基本一致，此处不再赘述，读者可自行
+配置。
+部署XmlTest这个Web应用，在浏览器中输入如下URL来测试应
+用：
+载入sendxml.jsp页面时会发送Ajax请求，传递XML数据。
+BookController接收到请求后，@RequestBody注解会将XML数据设置到
+Book参数对应的属性中。控制台输出如下：
+可以看到，XML数据传递的id、name、author元素被赋值到了Book
+对象对应的属性当中。
+示例：返回XML格式的数据
+程序清单：codes/03/XmlTest/WebContent/readxml.jsp
+
+readxml.jsp页面代码分析如下：
+（1）页面使用jQuery发送XML数据，在页面的＜head＞部分，引
+入了jQuery和json2的js文件。
+（2）载入页面时调用readxml函数。
+（3）readxml 函数发送异步请求到 readxml，请求成功将返回一个
+XML 数据，接到返回的数据后将XML数据中的元素读取出来并将其设
+置到页面的＜span＞中。
+BookController的readxml方法使用JAXB读取一个XML文件的数据
+并生成一个Book对象返回。@ResponseBody 会将Book对象转换成XML
+数据返回到前台JSP页面。
+在浏览器中输入如下URL来测试应用：
+请求响应如图3.22所示，这表示Spring MVC成功将XML数据返回到
+客户端。
+图3.22 Spring MVC返回XML数据
+
+3.16@RestController注解
+-------------------------
+
+org.springframework.web.bind.annotation.RestController 注解本身使
+用@Controller 和@ResponseBody注解。使用了@RestController注解的类
+会被看作一个Controller，而该类中所有使用@RequestMapping注解的方
+法都默认使用了@ResponseBody注解。
+@RestController注解的源代码如下：
+示例：@RestController注解的使用
+创建一个RestControllerTest项目，所有文件和配置基本和3.14节的
+ResponseBodyTest项目一致。
+程序清单：
+codes/03/RestControllerTest/src/org/fkit/controller/BookController
+BookController使用了@RestController注解，该类会被看成一个
+Controller，同时该类中所有使用@RequestMapping注解的方法都默认使
+用了@ResponseBody注解，getJson方法会将List集合数据转换成JSON格
+式并返回客户端。
+测试结果和ResponseBodyTest项目的测试结果一致，此处不再赘
+述。
+
+3.17 Spring MVC的异常处理
+----------------------------
+
+任何成熟的MVC框架都应该提供异常处理机制，当然可以在
+Controller的请求处理方法中手动使用try…catch块捕捉异常，当捕捉到
+特定异常时，返回特定逻辑视图名，但这种处理方式非常烦琐，需要在
+请求处理方法中书写大量的catch块。最大的缺点还在于异常处理与代码
+耦合，一旦需要改变异常处理方式，必须修改大量代码！这是一种相当
+糟糕的方式。
+Spring MVC中提供的异常处理方式有两种：
+（1）使用Spring MVC提供的简单异常处理器
+SimpleMappingExceptionResolver。
+（2）使用@ExceptionHandler注解实现局部异常处理或使用
+@ControllerAdvice注解实现统一异常处理。
+
+3.17.1 Spring MVC异常处理接口以及实现类
+++++++++++++++++++++++++++++++++++++++++++++
+
+HandlerExceptionResolver是Spring 3.0之后新增的一个重要接口，负
+责Spring MVC的异常处理。
+该接口只有一个方法签名：
+resolveException 方法处理程序执行期间被抛出的异常，返回一个模
+型和视图，视图通常是一个特定的错误处理页面。
+AbstractHandlerExceptionResolver 抽象类实现了
+HandlerExceptionResolver 接口，重写了HandlerExceptionResolver接口的
+resolveException方法用于处理异常。
+AbstractHandlerMethodExceptionResolver抽象类继承了
+AbstractHandlerExceptionResolver抽象类，该类主要就是为
+HandlerMethod类服务，即handler参数是HandlerMethod类型。
+ExceptionHandlerExceptionResolver类继承自
+AbstractHandlerMethodExceptionResolver，该类主要处理Controller中使
+用@ExceptionHandler注解的方法和@ControllerAdvice注解定义的类。该
+类也是＜mvc：annotation-driven/＞配置中定义的
+HandlerExceptionResolver实现类之一，大多数异常处理都由该类操作。
+SimpleMappingExceptionResolver继承自
+AbstractHandlerExceptionResolver抽象类，是一个根据配置来解析异常
+的类，包括异常类型、默认的错误视图、默认的响应码及异常映射等配
+置属性。
+因此，在 Spring MVC 中进行异常处理，如果选择 XML 配置，则
+使用 SimpleMapping-ExceptionResolver 类；如果使用@ExceptionHandler
+注解和@ControllerAdvice 注解，则由ExceptionHandlerExceptionResolver
+类进行处理。
+提示
+两种异常处理方式在项目中不能共存，在开发中通常根据实际情况
+来选择。
+示例：SimpleMappingExceptionResolver处理异常
+新建一个项目SimpleMappingExceptionResolverTest，加入所需的jar
+文件，示例代码如下：
+程序清单：
+codes/03/SimpleMappingExceptionResolverTest/WebContent/index.jsp
+index.jsp中有3个超链接，分别测试没有异常处理、有异常处理、特
+定异常处理3种情况。
+程序清单：
+codes/03/SimpleMappingExceptionResolverTest/src/org/fkit/controller/TestController
+TestController中有3个方法，分别对应index.jsp页面的3个请求：
+hello方法什么都没做，直接抛出一个异常。
+test方法模拟了一个除数不能为0异常。
+find方法模拟了一个除数不能为0异常之后，在catch块中抛出了一
+个SQLException异常。
+部署SimpleMappingExceptionResolverTest这个Web应用，在浏览器
+中输入如下URL来测试应用，如图3.23所示。
+图3.23 测试异常处理页面
+单击“没有异常处理”超链接，发送“hello”请求，此时没有异常处理
+程序，异常被直接抛给了浏览器，如图3.24所示。
+异常被直接抛到浏览器，页面上显示一大堆错误堆栈信息，用户看
+到这些错误堆栈信息，往往都会一头雾水，抱怨这个设计实在太不友
+好。而且错误堆栈信息由于暴露了后台方法的调用关系，对应用来说这
+是存在一定潜在风险的。虽然在web.xml中可以配置处理异常的jsp页
+面，但这还是远远不够的。Spring MVC对错误处理提供了更好的解决方
+案。
+图3.24 异常被直接抛到浏览器
+接下来，在springmvc-config.xml中加入异常处理的配置。
+程序清单：
+codes/03/SimpleMappingExceptionResolverTest/WebContent/WEBINF/
+springmvc-config.xml
+
+重点是异常处理的配置。SimpleMappingExceptionResolver是Spring
+提供的处理异常的类，所有抛出的异常都会被该类捕获。p：
+defaultErrorView=＂error＂表示所有没有指定的异常都跳转到异常处理
+页面error，p：exceptionAttribute=＂ex＂表示在异常处理页面中可以访
+问的异常对象变量名是ex。如果需要为一些特定的异常指定异常处理页
+面，可以使用exceptionMappings属性，该属性接受的参数是一个
+Properties对象，key是异常类名或者包名加类名，value是异常处理页
+面。例如上面的配置指明，如果是IOException则跳转到ioerror页面，是
+SQLException则跳转到sqlerror页面，是其他异常则全部跳转到error页
+面，在所有异常页面中可以通过ex变量访问异常对象Exception。
+程序清单：
+codes/03/SimpleMappingExceptionResolverTest/WebContent/content/error.jsp
+程序清单：
+codes/03/SimpleMappingExceptionResolverTest/WebContent/content/sqlerror.jsp
+再次运行SimpleMappingExceptionResolverTest这个Web应用，在浏
+览器中输入如下URL来测试应用：
+如图3.23所示。单击“使用简单异常处理器处理异常”超链接，发
+送“test”请求，抛出的异常被SimpleMappingExceptionResolver捕获，转
+发到异常处理页面error.jsp，如图3.25所示。
+图3.25 异常处理页面
+单击“使用简单异常处理器处理特定异常”超链接，发送“find”请
+求，请求处理方法抛出的是 SQLException 异常，被
+SimpleMappingExceptionResolver 捕获，转发到异常处理页面
+sqlerror.jsp，如图3.26所示。
+图3.26 特定异常处理页面
+
+3.17.2@ResponseStatus注解
+++++++++++++++++++++++++++++++++
+
+org.springframework.web.bind.annotation.ExceptionHandle.ResponseStatus
+注解是处理异常最简单的方式，其可以修饰一个类或者一个方法，当修
+饰一个类的时候，通常修饰的是一个异常类。
+使用@ResponseStatus注解可指定如表3.11所示的属性。
+表3.11@ResponseStatus注解支持的属性
+使用时，先声明一个自定义异常类，在自定义异常类上面加上
+@ResponseStatus注解，就表示在系统运行期间，当抛出自定义异常的时
+候，使用@ResponseStatus 注解中声明的 value属性和reason属性将异常
+信息返回给客户端，提高可读性。
+示例：@ResponseStatus处理异常
+新建一个项目ResponseStatusTest，加入所需的jar文件，示例代码如
+下：
+程序清单：codes/03/ResponseStatusTest/WebContent/index.jsp
+程序清单：
+codes/03/ResponseStatusTest/src/org/fkit/exception/BookException
+BookException是自定义异常类，使用了@ResponseStatus注解修
+饰，reason表示抛出异常时显示的错误信息，此处没有使用value属性，
+表示适用于所有http状态码。
+程序清单：
+codes/03/ResponseStatusTest/src/org/fkit/controller/BookController
+find方法模拟了一个异常，发生异常时抛出自定义异常
+BookException。
+部署ResponseStatusTest这个Web应用，在浏览器中输入如下URL来
+测试应用，如图3.27所示。
+图3.27@ResponseStatus注解测试页面
+单击“@ResponseStatus 异常处理”超链接，发送“find”请求，请求处
+理方法抛出自定义BookException异常，显示异常信息，如图3.28所示。
+图3.28 错误信息
+
+3.17.3@ExceptionHandle注解
+++++++++++++++++++++++++++++++++
+
+org.springframework.web.bind.annotation.ExceptionHandle 注解的作
+用对象为方法，并且在运行时有效，value（）可以指定异常类。
+@ExceptionHandler注解的源代码如下：
+@ExceptionHandler 注解的方法可以支持的参数除了
+HttpServletRequest、HttpServletResponse等对象之外，还支持一个异常
+参数，包括一般的异常或自定义异常。如果注解没有指定异常类，会默
+认进行映射。
+示例：@ExceptionHandler处理异常
+新建一个项目ExceptionHandlerTest，加入所需的jar文件，示例代码
+如下：
+程序清单：codes/03/ExceptionHandlerTest/WebContent/index.jsp
+index.jsp中有3个超链接，分别用于测试@ExceptionHandler异常处
+理和使用父级Controller异常处理。
+程序清单：
+codes/03/ExceptionHandlerTest/src/org/fkit/controller/TestController
+TestController中test（）方法是index.jsp页面的超链
+接“@ExceptionHandler处理异常”的请求处理方法，模拟了一个除数不能
+为0的异常。
+testErrorHandler（）方法使用了@ExceptionHandler注解，
+value=Exception.class表示处理所有的Exception类型异常。当
+TestController类抛出异常的时候，会使用@ExceptionHandler注解的方法
+去处理异常，而不会直接抛给浏览器。testErrorHandler（）方法将捕捉
+到的异常对象保存到ModelAndView当中，传递到JSP页面。
+程序清单：codes/03/ExceptionHandlerTest/WebContent/WEBINF/
+content/error.jsp
+部署ExceptionHandlerTest这个Web应用，在浏览器中输入如下URL
+来测试应用，如图3.29所示。
+图3.29@ExceptionHandler测试异常处理页面
+单击“@ExceptionHandler 处理异常”超链接，发送“test”请求，
+TestController 的 test（）方法处理请求，抛出异常，异常被
+@ExceptionHandler 注解修饰的 testErrorHandler 方法捕获，处理之后跳
+转到error.jsp页面，如图3.30所示。
+图3.30@ExceptionHandler异常处理页面
+基于Controller的@ExceptionHandler注解方法在进行异常处理时，
+对于每个Controller都需要写@ExceptionHandler注解的异常处理方法，
+在实际开发当中这非常烦琐。可以写一个父类，在父类中完成
+@ExceptionHandler注解的异常处理方法，所有的Controller继承这个父
+类，则所有的Controller就都拥有了@ExceptionHandler注解的异常处理
+方法。
+程序清单：
+codes/03/ExceptionHandlerTest/src/org/fkit/controller/BaseController
+BaseController作为父类，定义了一个@ExceptionHandler注解修饰
+的方法。
+程序清单：
+codes/03/ExceptionHandlerTest/src/org/fkit/controller/UserController
+UserController继承BaseController，如果抛出异常，将使用父类的
+@ExceptionHandler注解修饰的方法处理异常。
+程序清单：
+codes/03/ExceptionHandlerTest/src/org/fkit/controller/BookController
+BookController继承BaseController，如果抛出异常，将使用父类的
+@ExceptionHandler注解修饰的方法处理异常。
+再次部署Exception2Test这个Web应用，在浏览器中输入如下URL来
+测试应用，如图3.29所示。单击“UserController：父级Controller异常处
+理”超链接，发送“login”请求，异常处理之后跳转到error.jsp页面，如图
+3.31所示。
+图3.31@ExceptionHandle异常处理页面
+再次请求index.jsp页面，如图3.29所示。单击“BookController：父级
+Controller异常处理”超链接，发送“find”请求，异常处理之后跳转到
+error.jsp页面，如图3.32所示。
+图3.32@ExceptionHandle异常处理页面
+3.17.4@ControllerAdvice注解
+org.springframework.web.bind.annotation.ControllerAdvice注解是
+Spring 3.2提供的新注解，它是一个控制器增强功能注解。该注解源代码
+如下：
+该注解使用@Component 注解，也就是说可以使用＜context：
+component-scan＞扫描该注解。Spring官方文档说明，扫描到
+@ControllerAdvice注解之后，会将@ControllerAdvice注解修饰的类的内
+部使用@ExceptionHandler、@InitBinder、@ModelAttribute注解的方法
+应用到所有的请求处理方法上。在实际开发中，@ExceptionHandler注解
+的功能最强大，另外两个用处不大。
+示例：@ControllerAdvice处理异常
+新建一个项目ControllerAdviceTest，加入所需的jar文件，示例代码
+如下：
+程序清单：codes/03/ControllerAdviceTest/WebContent/index.jsp
+index.jsp 中有两个超链接，分别用来测试@ControllerAdvice 异常处
+理和异常处理时返回JSON 的两种情况。需要注意 id=“search”的按钮，
+使用 jQuery进行异步查询订单时，如果抛出异常，则获取返回的JSON
+数据并提示错误。
+程序清单：
+codes/03/ControllerAdviceTest/src/org/fkit/controller/BookController
+
+BookController处理“find”请求，在请求处理方法中简单地模拟了一
+个异常。BookController中并没有@ExceptionHandler注解修饰的方法，
+抛出的异常会由@ControllerAdvice注解修饰的类中的@ExceptionHandler
+注解修饰的方法进行处理。
+
+程序清单：
+codes/03/ControllerAdviceTest/src/org/fkit/controller/OrderException
+
+OrderException是一个自定义异常类型，继承自RuntimeException。
+程序清单：
+codes/03/ControllerAdviceTest/src/org/fkit/controller/OrderController
+OrderController 处理“search”请求，在请求处理方法中简单地模拟了
+一个异常，被捕捉后抛出OrderException自定义异常类型。
+
+程序清单：
+codes/03/ControllerAdviceTest/src/org/fkit/controller/GlobalExceptionHandler
+
+GlobalExceptionHandler 类使用了@ControllerAdvice 注解来修饰，其会被＜context：component-scan＞扫描，该类中使用
+@ExceptionHandler注解修饰的方法将被应用到所有请求处理方法上。
+
+GlobalExceptionHandler 类中定义了两个方法：第一个方法 globalErrorHandler 使用@ExceptionHandler注解修饰时
+value=Exception.class表示该方法处理所有Exception类型的异常，处理方式和之前一致，将异常信息对象保存到Model，并返回异常处理页面
+error.jsp；第二个方法OrderErrorHandler使用@ExceptionHandler注解修饰时，value=OrderException.class表示该方法处理OrderException自定义
+类型的异常，此处的处理方式和之前不同，这里创建一个Map对象保存信息并返回，由于方法使用了@ResponseBody注解，返回的Map对象会
+被转成JSON数据。
+
+部署ControllerAdviceTest这个Web应用，在浏览器中输入如下URL来测试应用，如图3.33所示。
+
+图3.33@ControllerAdvice测试异常处理页面
+
+单击“@ControllerAdvice异常处理”超链接，发送“find”请求，BookController的find（）方法处理请求，抛出异常，异常被
+@ControllerAdvice注解修饰的GlobalExceptionHandler类中 @ExceptionHandler（value=Exception.class）注解修饰的
+globalErrorHandler方法捕获，处理之后跳转到error.jsp页面，如图3.34所示。
+
+图3.34@ControllerAdvice异常处理页面
+
+再次请求index.jsp页面，如图3.33所示。单击“查询订单（返回
+JSON）”按钮，发送“search”请求，OrderController的search（）方法处
+理请求，抛出自定义异常OrderException，异常被@ControllerAdvice 注
+解修饰的 GlobalExceptionHandler 类中
+@ExceptionHandler（value=OrderException.class）注解修饰的
+OrderErrorHandler方法捕获，返回JSON信息，如图3.35所示。
+
+图3.35@ControllerAdvice异常处理页面
+
+3.17.5@RestControllerAdvice注解
+++++++++++++++++++++++++++++++++++++
+
+org.springframework.web.bind.annotation.RestController注解本身使用
+@ControllerAdvice和@ResponseBody注解。使用了
+@RestControllerAdvice注解的类会被看作一个ControllerAdvice，而该类
+中所有使用@ExceptionHandler注解的方法都默认使用@ResponseBody注解。
+@RestControllerAdvice注解的源代码如下：
+示例：@RestControllerAdvice注解的使用
+创建一个 RestControllerAdviceTest 项目，所有文件和配置基本和
+3.17.3 节的ControllerAdviceTest项目一致。
+
+程序清单：
+codes/03/RestControllerAdviceTest/src/org/fkit/controller/GlobalExceptionHandler
+
+GlobalExceptionHandler 使用了@RestControllerAdvice 注解，该类会被看成一个ControllerAdvice，同时该类中所有使用@ExceptionHandler
+注解的方法都默认使用了@ResponseBody注解，OrderErrorHandler方法会将Map集合数据转换成JSON格式并返回客户端。
+测试结果和ControllerAdviceTest项目的测试结果一致，此处不再赘述。
+
+3.18 本章小结
+-----------------
+
+本章介绍了Spring MVC的常用注解，包括@Controller、
+@RequestMapping两个最重要的注解和Spring MVC的常用注解。其中，
+@Controller注解用于指示Spring类的实例是一个控制器；
+@RequestMapping注解用来指示一个请求处理方法；@RequestParam等
+注解用于参数绑定。
+接着介绍了Spring MVC中的数据转换，包括重要的数据转换接口
+HttpMessageConverter和JSON格式数据以及XML格式数据的转换。其
+中，JSON格式的数据转换是目前项目开发中最为常用的转换手段，非
+常重要。
+最后，介绍了Spring MVC的异常处理。Spring MVC中的异常处理
+有两种方式：使用简单异常处理器SimpleMappingExceptionResolver 和使用@ExceptionHandler 注解和@ControllerAdvice注解。使用注解处理
+异常相对接口来说更加灵活。
+本章介绍的注解都是在Spring MVC中使用较多的注解，读者一定要
+好好掌握。
+第4章将重点介绍Spring MVC的表单标签库。

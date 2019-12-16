@@ -1,0 +1,463 @@
+第11章 MyBatis的注解配置
+==============================
+
+本章要点
+
+* MyBatis注解插入、修改、删除和查询操作
+* MyBatis注解一对一、一对多和多对多操作
+* MyBatis注解动态SQL
+* MyBatis注解调用存储过程
+* MyBatis注解使用二级缓存
+
+前面的章节介绍了MyBatis的基本用法、关联映射、动态SQL和缓
+存机制等知识，其所有的配置都使用XML完成，但是大量的XML配置
+文件的编写是非常烦琐的，因此MyBatis也提供了更加简便的基于注解
+（annotation）的配置方式。本章将重点介绍MyBatis的注解配置。
+
+11.1 常用注解
+-----------------
+
+MyBatis的注解位于 ``org.apache.ibatis.annotations`` 包下。常用的注解如下：
+
+* Select。 映射查询的SQL语句。
+* SelectProvider。 Select语句的动态SQL映射。允许指定一个类名和一个方法在执行时返回运行的查询语句。
+  有两个属性：type 和 method，type 属性是类的完全限定名，method是该类中的方法名。
+* Insert。 映射插入的SQL语句。
+* InsertProvider。 Insert语句的动态SQL映射。允许指定一个类名和一个方法在执行时返回运行的插入语句。
+  有两个属性：type 和 method，type 属性是类的完全限定名，method 是该类中的方法名。
+* Update。 映射更新的SQL语句。
+* UpdateProvider。 Update语句的动态SQL映射。允许指定一个类名和一个方法在执行时返回运行的更新语句。
+  有两个属性：type 和 method，type 属性是类的完全限定名，method是该类中的方法名。
+* Delete。 映射删除的SQL语句。
+* DeleteProvider。 Delete语句的动态 SQL映射。允许指定一个类名和一个方法在执行时返回运行的删除语句。
+  有两个属性：type 和 method，type 属性是类的完全限定名，method 是该类中的方法名。
+* Result。 在列和属性之间的单独结果映射。属性包括：id、 column、property、javaType、jdbcType、
+  type Handler、one、many。id 属性是一个布尔值，表示是否被用于主键映射。one 属性是单独的映射，
+  和XML配置中的 ``＜association＞`` 相似，而 many 属性是对集合而言的，和XML配置的 ``＜collection＞`` 相似。
+* Results。 多个结果映射（Result）列表。
+* Options。 提供配置选项的附加值，它们通常在映射语句上作为附加功能配置出现。
+* One。 复杂类型的单独属性值映射。必须指定select属性，表示已映射的SQL语句的完全限定名。
+* Many。 复杂类型的集合属性映射。必须指定select属性，表示已映射的SQL语句的完全限定名。
+* Param。 当映射器方法需要多个参数时，这个注解可以被应用于映射器方法参数来给每个参数取一个名字。
+  否则，多参数将会以它们的顺序位置和SQL语句中的表达式进行映射，这是默认的。使用 ``@Param(＂id＂)`` 时，
+  SQL中参数应该被命名为 ``＃{id}``。
+
+11.2 注解的使用
+-----------------
+
+``@select``、``@insert``、``@update`` 和 ``@delete`` 可以完成常见的CRUD（增删改查）SQL语句映射。
+
+示例：测试select、insert、update和delete操作
+
+本示例使用了第8章创建的tb_user表、数据库脚本，User.java、mybatis-config.xml和log4j.xml文件请参考第8章内容。
+执行以下SQL脚本，向tb_user表插入几条测试数据：
+
+数据库表
+
+.. code:: SQL
+
+    # 创建数据库表
+    DROP TABLE IF EXISTS `tb_user`;
+    CREATE TABLE `tb_user` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `name` varchar(18) DEFAULT NULL,
+    `sex` char(2) DEFAULT NULL,
+    `age` int(11) DEFAULT NULL,
+    PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    # 插入数据
+    INSERT INTO `tb_user` VALUES ('1', '小明', '男', '21');
+    INSERT INTO `tb_user` VALUES ('2', '小王', '男', '22');
+    INSERT INTO `tb_user` VALUES ('3', '小丽', '女', '18');
+    INSERT INTO `tb_user` VALUES ('4', '小芳', '女', '18');
+    INSERT INTO `tb_user` VALUES ('5', '小王', '男', '22');
+
+持久化对象
+
+.. code:: java
+
+    package domain;
+    public class User {
+        private Integer id;
+        private String name;
+        private String sex;
+        private Integer age;
+        // 此处省略无参构造器User()
+        // 此处省略getter和setter方法,请自己补上
+        // 此处省略toString()方法.
+    }
+
+mybatis-cofig.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8" ?>
+    <!DOCTYPE configuration
+    PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-config.dtd">
+    <!-- 该配置文件包含对 MyBatis 系统的核心设置 -->
+    <configuration>
+        <!-- 引入数据库信息配置文件 -->
+        <properties resource="db.properties"/>
+        <!-- 设置日志实现 -->
+        <settings>
+            <setting
+                name="logImpl"
+                value="log4j"/>
+        </settings>
+        <environments default="mysql">
+            <environment id="mysql">
+                <transactionManager type="JDBC"/>
+                <dataSource type="pooled">
+                    <property
+                        name="driver"
+                        value="${driver}"/>
+                    <property
+                        name="url"
+                        value="${url}"/>
+                    <property
+                        name="username"
+                        value="${username}"/>
+                    <property
+                        name="password"
+                        value="${password}"/>
+                </dataSource>
+            </environment>
+        </environments>
+        <mappers>
+            <!-- mapper如果引入的是接口，则使用class属性,class属性的值设为接口的完全限定类名 -->
+            <!-- mapper如果引入的是XML文件，则使用resource属性,resource属性的值设为xml相对于src的路径 -->
+            <mapper class="mapper.UserMapper"/>
+        </mappers>
+    </configuration>
+
+数据库信息配置文件db.properties
+
+.. code:: xml
+
+    # 保存为db.properties文件,然后在mybatis-config.xml中通过下面标签引入:
+    # <properties resource="db.properties"/>
+    driver=com.mysql.jdbc.Driver
+    url=jdbc:mysql://localhost:3306/mybatis
+    username=root
+    password=root
+
+log4j.xml
+
+.. code:: xml
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE log4j:configuration 
+        PUBLIC "-//LOG4J//DTD LOG4J//EN" 
+        "https://logging.apache.org/log4j/1.2/apidocs/org/apache/log4j/xml/doc-files/log4j.dtd" >
+    <!-- 请在mybatis-config.xml中配置如下设置 -->
+    <!-- <settings> -->
+    <!-- <setting -->
+    <!-- name="logImpl" -->
+    <!-- value="log4j"/> -->
+    <!-- </settings> -->
+    <log4j:configuration>
+        <appender
+            name="STDOUT"
+            class="org.apache.log4j.ConsoleAppender">
+            <layout class="org.apache.log4j.PatternLayout">
+                <param
+                    name="ConversionPattern"
+                    value="%5p [%t] %m%n"/>
+            </layout>
+        </appender>
+        <logger name="domain.User">
+            <level value="DEBUG"/>
+        </logger>
+        <root>
+            <level value="ERROR"/>
+            <appender-ref ref="STDOUT"/>
+        </root>
+    </log4j:configuration>
+
+程序清单：
+codes/11/ADMLTest/src/org/fkit/mapper/UserMapper.java
+
+.. code:: java
+
+    package mapper;
+    import org.apache.ibatis.annotations.Result;
+    import org.apache.ibatis.annotations.Results;
+    import org.apache.ibatis.annotations.Select;
+    import domain.User;
+    public interface UserMapper {
+        @Select("select * from tb_user where id=#{id}")
+        @Results({
+            @Result(property="id",column="id",id=true),
+            @Result(property="name",column="name"),
+            @Result(property="sex",column="sex"),
+            @Result(property="age",column="age")
+        })
+        User selectUserById(Integer id);
+        //如果数据表的列名和持久化对象的属性名完全一致,则可以省略@Results注解,Mybatis可以自动映射.
+        @Select("select * from tb_user where id=#{id}")
+        User selectUserById2(Integer id);
+    }
+
+在 UserMapper.java 中定义了 saveUser、removeUser、modifyUser、selectUserById 和selectAllUser 5个方法，分别对应插入、更新、删除、
+根据id查询用户和查询所有用户5个数据库操作，并使用注解代替了之
+前的 XML配置。注解配置中的 SQL语句和 XML配置中的SQL语句用法
+一致，此处不再赘述。
+程序清单：codes/11/ADMLTest/src/org/fkit/test/InsertTest.java
+
+运行InsertTest类的main方法，测试saveUser （）方法，控制台显示如下：
+
+
+saveUser方法的声明如下：
+
+
+调用saveUser方法，会执行@insert注解中的SQL语句。需要注意的
+是，saveUser方法还使用了@Options注解，属性useGeneratedKeys=true
+表示使用数据库自动增长的主键，该操作需要底层数据库的支持。
+keyProperty=＂id＂表示将插入数据生成的主键设置到user对象的id当
+中。
+程序清单：codes/11/ADMLTest/src/org/fkit/test/SelectTest.java
+运行SelectTest类的main方法，测试selectUserById （）方法，控制
+台显示如下：
+
+selectUserById方法的声明如下：
+调用selectUserById方法，会执行@Select注解中的SQL语句。
+@Result注解用于列和属性之间的结果映射，如果列和属性名称相同，
+则可以省略@Result注解，MyBatis会自动进行映射。
+程序清单：codes/11/ADMLTest/src/org/fkit/test/UpdateTest.java
+运行UpdateTest类的main方法，测试modifyUser （）方法，控制台
+显示如下：
+modifyUser方法的声明如下：
+调用modifyUser方法，会执行@Update注解中的SQL语句。
+程序清单：codes/11/ADMLTest/src/org/fkit/test/DeleteTest.java
+运行DeleteTest类的main方法，测试removeUser （）方法，控制台
+显示如下：
+removeUser方法的声明如下：
+调用removeUser方法，会执行@Delete注解中的SQL语句。
+@Param（＂id＂）注解表示给该注解后面的变量取一个参数名称，对
+应@Delete注解中的＃{id}。如果没有使用@Param注解，则参数将会以
+它们的顺序位置来和SQL语句中的表达式进行映射。
+程序清单：codes/11/ADMLTest/src/org/fkit/test/SelectAllTest.java
+运行SelectAllTest类的main方法，测试selectAllUser （）方法，控制
+台显示如下：
+selectAllUser方法的声明如下：
+调用selectAllUser方法，会执行@Select注解中的SQL语句。
+示例：测试一对一关联
+本示例使用了10.1.1节中的一对一关系的tb_crad表和tb_person表，
+数据库脚本、Card.java、Person.java、FKSqlSessionFactory.java、
+mybatis-config.xml和log4j.xml文件请参考第10章内
+容，此处不再赘述。
+程序清单：
+codes/11/AOneToOneTest/src/org/fkit/mapper/CardMapper.java
+程序清单：
+codes/11/AOneToOneTest/src/org/fkit/mapper/PersonMapper.java
+selectPersonById方法使用了@Select注解，其根据id查询对应的
+Person数据。因为需要将Person对应的Card数据也查询出来，所以Person
+的Card属性使用了一个@Result结果映射。column=＂card_id＂，
+property=＂card＂表示Person的Card属性对应tb_person表的card_id列，
+one属性表示是一个一对一关联关系，@One注解的select属性表示需要
+关联执行的SQL语句，fetchType表示查询的类型是立即加载
+（EAGER）还是懒加载（LAZY）。
+程序清单：
+codes/11/AOneToOneTest/src/org/fkit/test/OneToOneTest.java
+运行OneToOneTest类的main方法，该方法通过SqlSession的
+getMapper（Class＜T＞ type）方法获得mapper接口的代理对象
+PersonMapper。调用selectPersonById方法时会执行该方法上的注解。需
+要注意的是，Person的一对一关联使用的注解@one的select属性，要执
+行的SQL语句在CardMapper类的selectCardById方法的注解中。控制台显
+示如下：
+可以看到，查询Peson信息时Person对应的Card对象也被查询出来
+了。
+示例：测试一对多关联
+本示例使用了 10.1.2 节中的一对多关系的 tb_calzz 表和 tb_student
+表，数据库脚本、Clazz.java、Student.java、FKSqlSessionFactory.java、
+mybatis-config.xml和log4j.xml文件请参考第10章内容，此处不再赘述。
+程序清单：
+codes/11/AOneToManyTest/src/org/fkit/mapper/StudentMapper.java
+
+程序清单：
+codes/11/AOneToManyTest/src/org/fkit/mapper/ClazzMapper.java
+
+selectById方法使用了@Select注解，其根据id查询对应的Clazz数
+据。因为需要将Clazz所关联的所有Student查询出来，所以Clazz的
+students属性使用了一个@Result结果映射。column=＂id＂表示会使用id
+作为查询条件，property=＂students＂表示Clazz的students属性（该属性
+是个集合），many属性表示是一个一对多关联关系，@Many注解的
+select属性表示需要关联执行的SQL语句，fetchType表示查询的类型是
+立即加载（EAGER）还是懒加载（LAZY）。
+程序清单：
+codes/11/AOneToManyTest/src/org/fkit/test/OneToManyTest.java
+运行OneToManyTest类的main方法，该方法通过SqlSession的
+getMapper（Class＜T＞type）方法获得mapper接口的代理对象
+ClazzMapper。调用selectById方法时会执行该方法上的注解。需要注意
+的是，Clazz的一对多关联使用的注解@Many的select属性，要执行的
+SQL语句在StudentMapper类的selectByClazzId方法的注解中。由于使用
+的是懒加载，故需要用到关联的学生对象时才会执行SQL语句。控制台
+显示如下：
+可以看到，首先查询了id为1的Clazz的数据，当使用Clazz关联的
+Student数据时才执行了根据班级id查询学生的SQL语句。
+示例：测试多对多关联
+本示例使用了10.1.3节中的多对多关系的tb_user表、tb_order表和
+tb_article表，数据库脚本，User.java、Order.java、Article.java、
+FKSqlSessionFactory.java、mybatis-config.xml 和log4j.xml文件请参考第
+10章内容，此处不再赘述。
+程序清单：
+codes/11/AManyToManyTest/src/org/fkit/mapper/UserMapper.java
+程序清单：
+codes/11/AManyToManyTest/src/org/fkit/mapper/ArticleMapper.java
+程序清单：
+codes/11/AManyToManyTest/src/org/fkit/mapper/OrdreMapper.java
+selectOrderById方法使用了@Select注解，其根据id查询对应的Order
+数据。Order的user属性使用了一个@Result结果映射。@One注解的
+select属性表示需要关联执行的SQL语句，fetchType表示查询的类型是
+立即加载（EAGER）还是懒加载（LAZY）。Order的一对多关联使用
+的注解@Many的select属性，要执行的SQL语句在ArticleMapper类的
+selectByOrderId方法的注解中。由于使用的是懒加载，故需要用到关联
+的Article对象时才会执行SQL语句。
+程序清单：
+codes/11/AManyToManyTest/src/org/fkit/test/ManyToManyTest.java
+运行ManyToManyTest类的main方法，该方法通过SqlSession的
+getMapper（Class＜T＞type）方法获得mapper接口的代理对象
+OrderMapper。调用selectById方法时会执行该方法上的注解。Order和
+User之间是多对一关系，使用@One关联；Order和Article之间是多对多
+关系，使用@Many关联。控制台显示如下：
+可以看到，程序首先查询了id为1的Order的数据，因为使用立即加
+载，所以立即执行了查询关联的User的SQL语句；而多对多关联使用懒
+加载，当使用到关联的Article的数据时才执行了根据order_id查询Article
+的SQL语句。
+示例：测试动态SQL
+MyBatis 的注解也支持动态 SQL。MyBatis 提供了各种注解，如
+@InsertProvider、@UpdateProvider、@DeleteProvider和
+@SelectProvider，来帮助构建动态SQL语句，然后MyBatis可以执行这些
+SQL语句。
+以上4个Provider注解都有type属性，该属性指定了一个类。method
+属性指定该类的方法，其用来提供需要执行的SQL语句。使用字符串拼
+接的方法构建SQL语句是非常困难的，并且容易出错。所以MyBaits提
+供了一个SQL工具类org.apache.ibatis.jdbc.SQL，该类不使用字符串拼接
+的方式，并且会以合适的空格前缀和后缀来构造SQL语句。
+SQL类的常用方法如下：
+T SELECT（String columns）。 启动或追加SELECT子句，参数通常是一个以逗号分隔的列的列表。
+T FROM（String table）。 启动或追加FROM子句。调用可以超过一次，这些参数通常是一个表名。
+T JOIN（String join）。 向JOIN子句添加一个新的查询条件，该参数通常是一个表，也可以包括一个标准的连接返回的结果集。
+T INNER_JOIN（String join）。 同JOIN子句，连接方式是内连接（INNER_JOIN）。
+T LEFT_OUTER_JOIN（String join）。 同 JOIN 子句，连接方式是左外连接（LEFT_OUTER_JOIN）。
+T RIGHT_OUTER_JOIN（String join）。 同JOIN子句，连接方式是右外连接（RIGHT_OUTER_JOIN）。
+T WHERE（String conditions）。 追加一个新的WHERE子句条件，可以多次调用。
+T OR（）。 使用OR拆分当前WHERE子句条件，可以不止一次调用。
+T AND（）。 使用AND拆分当前WHERE子句条件，可以不止一次调用。
+T GROUP_BY（String columns）。 追加一个新的GROUP BY子句元素。
+T HAVING（String conditions）。 追加一个新的HAVING子句条件。
+T ORDER_BY（String columns）。 追加一个新的ORDER BY子句元素。
+T INSERT_INTO（String tableName）。 启动INSERT语句插入到指定表，应遵循由一个或多个VALUES（）调用。
+T VALUES（String columns，String values）。 追加的INSERT语句。第一个参数是要插入的列，第二个参数是插入的值。
+T DELETE_FROM（String table）。 启动DELETE语句，并指定删除表。
+T UPDATE（String table）。 启动一个更新（UPDATE）语句，并指定更新表。
+T SET（String sets）。 追加一个SET更新语句列表。
+动态SQL provider方法可以接受以下参数：
+无参数
+java对象
+java.util.Map
+本示例使用了 10.2 节中的动态 SQL 的 tb_employee 表，数据库脚
+本、Employee.java、FKSqlSessionFactory.java、mybatis-config.xml和
+log4j.xml文件请参考第10章内容，此处不再赘述。
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+这里我们使用了@SelectProvider 指定了一个类
+EmployeeDynaSqlProvider 及其内部方法selectWhitParam，用来提供需要
+执行的SQL语句。
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/mapper/EmployeeDynaSqlProvider.java
+selectWhitParam方法会根据参数Map中的内容构建动态的SELECT
+语句。
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/test/DynamicSQLTest.java
+运行DynamicSQLTest类的main方法，执行testSelectWhitParam方
+法，控制台显示如下：
+查看MyBatis执行的SQL语句，因为Map中只是设置了loginname和
+password参数，所以执行的SQL语句是“WHERE （loginname=？AND password=？）”。
+selectWhitParam方法也可以传递Employee对象作为参数，示例代码
+如下：
+读者可以多使用几种不同的参数组合测试selectWhitParam方法，观
+察控制台SQL语句，以便更好地理解动态SQL查询。
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/mapper/EmployeeDynaSqlProvider.java
+insertEmployee方法会根据参数Employee对象的属性动态构建
+INSERT语句。
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/test/DynamicSQLTest.java
+运行DynamicSQLTest类的main方法，执行testInsertEmployee方法，
+控制台显示如下：
+读者可以多使用几种不同的属性组合测试insertEmployee方法，观
+察控制台SQL语句，以便更好地理解动态SQL插入。
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/mapper/EmployeeDynaSqlProvider.java
+updateEmployee方法会根据参数Employee对象的属性动态构建
+update语句。
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/test/DynamicSQLTest.java
+运行DynamicSQLTest类的main方法，执行testUpdateEmployee方
+法，控制台显示如下：
+读者可以多使用几种不同的属性组合测试updateEmployee方法，观
+察控制台SQL语句，以便更好地理解动态SQL更新。
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/mapper/EmployeeMapper.java
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/mapper/EmployeeDynaSqlProvider.java
+deleteEmployee方法会根据参数Map中的内容动态构建DELETE语
+句。
+程序清单：
+codes/11/ADynamicSQLTest/src/org/fkit/test/DynamicSQLTest.java
+运行DynamicSQLTest类的main方法，执行testDeleteEmployee方
+法，控制台显示如下：
+读者可以多使用几种不同的属性组合测试deleteEmployee方法，观
+察控制台SQL语句，以便更好地理解动态SQL删除。
+示例：测试调用存储过程
+本示例使用了10.3节中调用存储过程示例的tb_user表，数据库脚
+本、User.java、FKSqlSessionFactory.java、mybatis-config.xml和log4j.xml
+文件请参考第10章内容，此处不再赘述。
+程序清单：
+codes/11/AProcedureTest/src/org/fkit/mapper/UserMapper.java
+
+UserMapper.java只是将之前写在XML文件当中调用存储过程的SQL
+语句写在了注解当中，注意需要使用
+@Options（statementType=StatementType.CALLABLE）提供调用存储过
+程的CALLBALE选项，其他并无不同。
+程序清单：
+codes/11/AProcedureTest/src/org/fkit/mapper/AProcedureTest.java
+
+
+所有测试结果和10.3节中的测试结果完全一致，读者可以自行测
+试，此处不再赘述。
+示例：测试二级缓存
+本示例使用了 10.5.2 节中二级缓存示例的 tb_user 表，数据库脚
+本、User.java、FKSqlSessionFactory.java、mybatis-config.xml和log4j.xml
+文件请参考第10章内容，此处不再赘述。
+程序清单：
+codes/11/ATwoLevelCacheTest/src/org/fkit/mapper/UserMapper.java
+
+
+UserMapper.java只是将之前写在XML文件当中的二级缓存配置写在
+了注解当中，其他并无不同。
+@CacheNamespace注解用来配置二级缓存，该注解同样可以配置各
+项属性。
+eviction=LruCache.class 表示使用回收策略的 class，所有回收策略
+的类型都位于org.apache.ibatis.cache.decorators包下。
+flushInterval=60000表示刷新间隔。
+size=512表示缓存数目。
+readWrite=true表示只读，和之前XML中的readOnly属性一样。
+程序清单：
+codes/11/ATwoLevelCacheTest/src/org/fkit/mapper/ATwoLevelCacheTest.java
+
+所有测试结果和10.5.2节中的测试结果完全一致，读者可以自行测
+试，此处不再赘述。
+
+11.3 本章小结
+-----------------
+本章详细介绍了MyBatis的常用注解，包括增删改查和一对一关联、一对多关联、多对多关联、动态SQL、
+调用存储过程和使用二级缓存的操作。
+
+第12章将重点介绍Spring MVC和MyBatis的整合。
